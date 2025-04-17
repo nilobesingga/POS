@@ -1,4 +1,13 @@
 import { Link } from "wouter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/context/auth-context";
 
 interface HeaderProps {
   title: string;
@@ -6,6 +15,8 @@ interface HeaderProps {
 }
 
 export default function Header({ title, toggleMobileNav }: HeaderProps) {
+  const { user, logout } = useAuth();
+
   return (
     <header className="bg-white shadow-sm p-4 flex items-center justify-between">
       <div className="flex items-center">
@@ -18,7 +29,7 @@ export default function Header({ title, toggleMobileNav }: HeaderProps) {
         )}
         <h2 className="text-lg font-semibold">{title}</h2>
       </div>
-      
+
       <div className="flex items-center space-x-3">
         <div className="relative">
           <button className="p-1 text-gray-500 hover:text-primary focus:outline-none">
@@ -35,13 +46,43 @@ export default function Header({ title, toggleMobileNav }: HeaderProps) {
             </svg>
           </button>
         </div>
-        <div className="md:hidden">
-          <button className="p-1 text-gray-500 hover:text-primary focus:outline-none">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </button>
-        </div>
+
+        {/* User Profile Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="p-1 text-gray-500 hover:text-primary focus:outline-none flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span className="ml-2 hidden md:inline-block">{user?.displayName || "User"}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+
+            {user && (
+              <>
+                <div className="px-2 py-1.5 text-sm">
+                  <div className="font-medium">{user.displayName}</div>
+                  <div className="text-xs text-muted-foreground">{user.email || user.username}</div>
+                  <div className="text-xs text-muted-foreground capitalize mt-1">Role: {user.role}</div>
+                </div>
+                <DropdownMenuSeparator />
+              </>
+            )}
+
+            <Link href="/settings">
+              <DropdownMenuItem className="cursor-pointer">
+                Settings
+              </DropdownMenuItem>
+            </Link>
+
+            <DropdownMenuItem className="cursor-pointer" onClick={logout}>
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

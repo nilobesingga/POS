@@ -5,19 +5,20 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
   Cell
 } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiRequest } from "@/lib/queryClient";
 
 // Date range options
 const dateRanges = [
@@ -28,12 +29,13 @@ const dateRanges = [
   { value: "thisMonth", label: "This Month" }
 ];
 
-// Function to calculate date range based on selection
-const getDateRange = (range: string) => {
+// Get date range from option
+const getDateRange = (option: string) => {
   const now = new Date();
-  let startDate, endDate;
-  
-  switch (range) {
+  let startDate: Date;
+  let endDate: Date;
+
+  switch (option) {
     case "today":
       startDate = startOfDay(now);
       endDate = endOfDay(now);
@@ -46,19 +48,15 @@ const getDateRange = (range: string) => {
       startDate = startOfDay(subDays(now, 6));
       endDate = endOfDay(now);
       break;
-    case "last30days":
-      startDate = startOfDay(subDays(now, 29));
-      endDate = endOfDay(now);
-      break;
     case "thisMonth":
       startDate = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
       endDate = endOfDay(now);
       break;
-    default:
+    default: // last30days
       startDate = startOfDay(subDays(now, 29));
       endDate = endOfDay(now);
   }
-  
+
   return { startDate, endDate };
 };
 
@@ -67,34 +65,30 @@ const COLORS = ['#3B82F6', '#10B981', '#6366F1', '#F59E0B', '#EF4444'];
 
 export default function ReportsPage() {
   const [dateRange, setDateRange] = useState("last30days");
-  
+
   // Calculate date range
   const { startDate, endDate } = getDateRange(dateRange);
-  
+
   // Format dates for API
   const formattedStartDate = format(startDate, "yyyy-MM-dd");
   const formattedEndDate = format(endDate, "yyyy-MM-dd");
-  
+
   // Fetch sales report
-  const { 
-    data: salesReport, 
+  const {
+    data: salesReport,
     isLoading,
-    isError 
+    isError
   } = useQuery({
     queryKey: [`/api/reports/sales?startDate=${formattedStartDate}&endDate=${formattedEndDate}`],
+    queryFn: async () => {
+      const response = await apiRequest(
+        "GET",
+        `/api/reports/sales?startDate=${formattedStartDate}&endDate=${formattedEndDate}`
+      );
+      return response.json();
+    }
   });
-  
-  // Dummy data for sales by day chart - in a real app this would be from the API
-  const salesByDayData = [
-    { day: "Mon", sales: 1200 },
-    { day: "Tue", sales: 940 },
-    { day: "Wed", sales: 1100 },
-    { day: "Thu", sales: 1400 },
-    { day: "Fri", sales: 1700 },
-    { day: "Sat", sales: 1600 },
-    { day: "Sun", sales: 1000 }
-  ];
-  
+
   return (
     <div className="flex-1 p-6 overflow-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
@@ -115,7 +109,7 @@ export default function ReportsPage() {
           </Select>
         </div>
       </div>
-      
+
       {/* Stats Summary */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
         <Card>
@@ -128,11 +122,11 @@ export default function ReportsPage() {
             ) : isError ? (
               <p className="text-red-500">Error</p>
             ) : (
-              <div className="text-2xl font-bold">${salesReport?.totalSales?.toFixed(2) || "0.00"}</div>
+              <div className="text-2xl font-bold">${Number(salesReport?.totalSales).toFixed(2) || "0.00"}</div>
             )}
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Orders</CardTitle>
@@ -147,7 +141,7 @@ export default function ReportsPage() {
             )}
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Avg. Order Value</CardTitle>
@@ -159,12 +153,12 @@ export default function ReportsPage() {
               <p className="text-red-500">Error</p>
             ) : (
               <div className="text-2xl font-bold">
-                ${salesReport?.orderCount ? (salesReport.totalSales / salesReport.orderCount).toFixed(2) : "0.00"}
+                ${salesReport?.orderCount ? (Number(salesReport.totalSales) / salesReport.orderCount).toFixed(2) : "0.00"}
               </div>
             )}
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Period</CardTitle>
@@ -182,37 +176,7 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
       </div>
-      
-      {/* Sales Graph */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Sales Over Time</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="w-full h-80">
-              <Skeleton className="w-full h-full" />
-            </div>
-          ) : isError ? (
-            <div className="text-center py-10">
-              <p className="text-red-500">Failed to load sales data. Please try again.</p>
-            </div>
-          ) : (
-            <div className="w-full h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={salesByDayData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="day" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`$${value}`, 'Sales']} />
-                  <Bar dataKey="sales" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      
+
       {/* Top Products */}
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
         <Card>
@@ -245,14 +209,14 @@ export default function ReportsPage() {
                       <div className={`w-3 h-3 rounded-full mr-2`} style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                       <span className="font-medium">{product.name}</span>
                     </div>
-                    <span className="text-gray-500">${product.total.toFixed(2)}</span>
+                    <span className="text-gray-500">${Number(product.total).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Sales by Product</CardTitle>

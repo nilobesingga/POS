@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ProductCardProps {
   product: Product;
@@ -22,23 +23,53 @@ function ProductCard({ product, onAddToCart }: ProductCardProps) {
   return (
     <div className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
       <div className="h-36 bg-gray-200 relative">
-        <img 
-          src={product.imageUrl} 
-          alt={product.name} 
+        <img
+          src={product.imageUrl || '/placeholder-product.png'}
+          alt={product.name}
           className="w-full h-full object-cover"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.src = '/placeholder-product.png';
+          }}
         />
         <div className={`absolute bottom-0 right-0 m-2 ${stockStatus.className} text-white text-xs font-semibold px-2 py-1 rounded`}>
           {stockStatus.text}
         </div>
+
+        {product.hasAllergens && (
+          <div className="absolute top-0 right-0 m-2 bg-red-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
+            <span title={Array.isArray(product.allergens) ? product.allergens.map(a => `${a.name} (${a.severity})`).join(', ') : 'Contains allergens'}>
+              Allergens
+            </span>
+          </div>
+        )}
       </div>
       <div className="p-3">
-        <h3 className="font-medium">{product.name}</h3>
+        <h3 className="font-medium text-base mb-1 line-clamp-2">{product.name}</h3>
+        {product.description && (
+          <p className="text-sm text-gray-500 mb-2 line-clamp-1">{product.description}</p>
+        )}
+
+        {product.hasAllergens && (
+          <div className="mt-1 mb-2">
+            <div className="text-xs text-red-600 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span>
+                Contains allergens
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-between items-center mt-2">
           <p className="font-bold text-primary">${Number(product.price).toFixed(2)}</p>
           <button
             className={`text-gray-500 hover:text-primary ${!product.inStock ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={() => product.inStock && onAddToCart(product)}
             disabled={!product.inStock}
+            title={product.inStock ? 'Add to cart' : 'Out of stock'}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -72,29 +103,37 @@ function ProductsLoading() {
 export default function ProductSection() {
   const { addToCart } = useCart();
   const { toast } = useToast();
-  
+
   // State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
-  
+
   // Fetch products
-  const { 
-    data: products, 
+  const {
+    data: products,
     isLoading: isLoadingProducts,
-    isError: isProductsError 
-  } = useQuery({
+    isError: isProductsError
+  } = useQuery<Product[]>({
     queryKey: ["/api/products"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/products");
+      return response.json();
+    }
   });
-  
+
   // Fetch categories
-  const { 
-    data: categories, 
+  const {
+    data: categories,
     isLoading: isLoadingCategories,
-    isError: isCategoriesError 
-  } = useQuery({
+    isError: isCategoriesError
+  } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/categories");
+      return response.json();
+    }
   });
-  
+
   // Handle add to cart
   const handleAddToCart = (product: Product) => {
     if (!product.inStock) {
@@ -105,28 +144,28 @@ export default function ProductSection() {
       });
       return;
     }
-    
+
     addToCart(product, 1);
-    
+
     toast({
       title: "Added to cart",
       description: `${product.name} has been added to your cart`,
     });
   };
-  
+
   // Filter products based on search and category
-  const filteredProducts = products ? products.filter((product: Product) => {
+  const filteredProducts = products?.filter((product: Product) => {
     // Search filter
-    const matchesSearch = searchQuery === "" || 
+    const matchesSearch = searchQuery === "" ||
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (product.description && product.description.toLowerCase().includes(searchQuery.toLowerCase()));
-      
+
     // Category filter
     const matchesCategory = selectedCategory === null || product.categoryId === selectedCategory;
-    
+
     return matchesSearch && matchesCategory;
-  }) : [];
-  
+  }) ?? [];
+
   return (
     <div className="md:w-2/3 flex flex-col bg-gray-50 h-full">
       {/* Search and Categories */}
@@ -157,7 +196,7 @@ export default function ProductSection() {
             </svg>
           </Button>
         </div>
-        
+
         <div className="flex overflow-x-auto scrollbar-hide pb-2 gap-2">
           <button
             className={`${selectedCategory === null ? 'bg-primary text-white' : 'bg-white text-gray-700 border border-gray-200'} rounded-full px-4 py-1 text-sm whitespace-nowrap flex-shrink-0 hover:bg-gray-50`}
@@ -165,7 +204,7 @@ export default function ProductSection() {
           >
             All Items
           </button>
-          
+
           {isLoadingCategories ? (
             // Show loading skeletons for categories
             Array(4).fill(0).map((_, index) => (
@@ -185,7 +224,7 @@ export default function ProductSection() {
           )}
         </div>
       </div>
-      
+
       {/* Products Grid */}
       <div className="flex-1 p-4 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {isLoadingProducts ? (

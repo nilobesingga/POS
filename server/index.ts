@@ -1,70 +1,71 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import express, { Request, Response, NextFunction } from "express";
+import cors from "cors";
+import { registerRoutes } from "./routes/index.js";
+import { setupVite, serveStatic, log } from "./vite.js";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
+
+// ES Module equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+interface ErrorWithStatus extends Error {
+    status?: number;
+}
+
+dotenv.config();
 
 const app = express();
+
+// Configure CORS
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production'
+        ? 'https://your-production-domain.com'
+        : 'http://localhost:5000',
+    credentials: true
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+// Ensure uploads directory exists
+const uploadsPath = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+}
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
-});
+// Serve uploaded files with absolute path
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 (async () => {
-  const server = await registerRoutes(app);
+    try {
+        // Register routes without starting the server
+        await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+        // Error handler
+        app.use((err: ErrorWithStatus, _req: Request, res: Response, _next: NextFunction) => {
+            const status = err.status || 500;
+            res.status(status).json({ message: err.message || "Internal Server Error" });
+            console.error("❌ Unhandled error:", err);
+        });
 
-    res.status(status).json({ message });
-    throw err;
-  });
+        const port = Number(process.env.PORT) || 5000;
+        const host = process.env.HOST || "127.0.0.1";
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
+        const server = app.listen(port, host, () => {
+            log(`🚀 Server running at http://${host}:${port}`);
+        });
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 5000;
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
+        if (process.env.NODE_ENV === "development") {
+            await setupVite(app, server);
+        } else {
+            serveStatic(app);
+        }
+
+    } catch (err) {
+        console.error("❌ Server failed to start:", err);
+        process.exit(1);
+    }
 })();
