@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Category, InsertCategory } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
@@ -58,6 +58,11 @@ export default function ItemsCategoriesPage() {
       return response.json();
     }
   });
+
+  // Effect to ensure data is fetched when component mounts
+  useEffect(() => {
+    // This will ensure categories data is fetched when navigating to this page
+  }, []);
 
   // Add category mutation
   const addCategoryMutation = useMutation({

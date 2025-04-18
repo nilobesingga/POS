@@ -6,7 +6,9 @@ import {
     orderItems, type OrderItem, type InsertOrderItem,
     storeSettings, type StoreSettings, type InsertStoreSettings
 } from "@shared/schema";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { drizzle as drizzlePgNode } from "drizzle-orm/node-postgres";
 import pkg from "pg";
 const { Pool } = pkg;
 import * as schema from "../shared/schema";
@@ -16,11 +18,12 @@ dotenv.config();
 
 type ExtendedOrderItem = OrderItem & { product?: Product };
 
+// Use pg directly instead of postgres
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
 });
 
-export const db = drizzle(pool, { schema });
+export const db = drizzlePgNode(pool, { schema });
 export class PostgresStorage {
     // Users
     async getUser(id: number): Promise<User | undefined> {

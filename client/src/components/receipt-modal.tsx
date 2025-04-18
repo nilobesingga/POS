@@ -14,6 +14,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { useAuth } from "@/context/auth-context";
+import { useCurrency } from "@/hooks/use-currency";
 
 const emailFormSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -40,6 +41,7 @@ interface OrderResponse {
 export default function ReceiptModal({ isOpen, onClose, onNewOrder, orderId, cart }: ReceiptModalProps) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { format: formatCurrency } = useCurrency();
   const receiptRef = useRef<HTMLDivElement>(null);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -133,26 +135,35 @@ export default function ReceiptModal({ isOpen, onClose, onNewOrder, orderId, car
   };
 
   // Helper function to safely extract price from order items
-  const extractPrice = (item: JoinedOrderItem): number => {
+  const extractPrice = (item: JoinedOrderItem | null | undefined): number => {
+    if (!item) {
+      return 0;
+    }
+
     // First check if price exists directly on the item
     if (item.price !== undefined && item.price !== null) {
       // Handle different types of price data
       if (typeof item.price === 'string') {
-        return parseFloat(item.price);
+        const parsed = parseFloat(item.price);
+        return isNaN(parsed) ? 0 : parsed;
       } else if (typeof item.price === 'number') {
-        return item.price;
+        return isNaN(item.price) ? 0 : item.price;
       } else if (typeof item.price === 'object' && item.price !== null) {
         // For numeric SQL types that might be returned as objects with value property
         const priceObj = item.price as { value?: unknown };
         if (priceObj && 'value' in priceObj) {
-          return Number(priceObj.value);
+          const value = Number(priceObj.value);
+          return isNaN(value) ? 0 : value;
         }
       }
     }
 
     // If no price found on item, try to get it from the product
     if (item.products?.price) {
-      return Number(item.products.price);
+      const productPrice = typeof item.products.price === 'string'
+        ? parseFloat(item.products.price)
+        : Number(item.products.price);
+      return isNaN(productPrice) ? 0 : productPrice;
     }
 
     // If all else fails, return 0
@@ -160,7 +171,7 @@ export default function ReceiptModal({ isOpen, onClose, onNewOrder, orderId, car
   };
 
   // Helper function to safely extract quantity from order items
-  const extractQuantity = (item: JoinedOrderItem | any): number => {
+  const extractQuantity = (item: JoinedOrderItem | null | undefined): number => {
     if (!item) {
       return 0;
     }
@@ -169,14 +180,16 @@ export default function ReceiptModal({ isOpen, onClose, onNewOrder, orderId, car
     if (item.quantity !== undefined) {
       // Handle various data types for quantity
       if (typeof item.quantity === 'number') {
-        return item.quantity;
+        return isNaN(item.quantity) ? 0 : item.quantity;
       } else if (typeof item.quantity === 'string') {
-        return parseInt(item.quantity, 10) || 0;
+        const parsed = parseInt(item.quantity, 10);
+        return isNaN(parsed) ? 0 : parsed;
       } else if (typeof item.quantity === 'object' && item.quantity !== null) {
         // PostgreSQL numeric types can be returned as objects
         const quantityObj = item.quantity as any;
         if ('value' in quantityObj) {
-          return Number(quantityObj.value) || 0;
+          const value = Number(quantityObj.value);
+          return isNaN(value) ? 0 : value;
         }
       }
     }
@@ -191,17 +204,19 @@ export default function ReceiptModal({ isOpen, onClose, onNewOrder, orderId, car
     ];
 
     for (const key of possibleKeys) {
-      if (item[key] !== undefined) {
-        return Number(item[key]) || 0;
+      if (key in item && item[key as keyof typeof item] !== undefined) {
+        const value = Number(item[key as keyof typeof item]);
+        return isNaN(value) ? 0 : value;
       }
     }
 
     // As a last resort, search all properties for anything containing 'quantity'
     for (const key of Object.keys(item)) {
       if (key.toLowerCase().includes('quantity')) {
-        const value = item[key];
+        const value = item[key as keyof typeof item];
         if (value !== undefined && value !== null) {
-          return Number(value) || 0;
+          const numValue = Number(value);
+          return isNaN(numValue) ? 0 : numValue;
         }
       }
     }
@@ -309,9 +324,9 @@ export default function ReceiptModal({ isOpen, onClose, onNewOrder, orderId, car
                               <div className="font-medium">
                                 {productName}
                               </div>
-                              <div className="text-gray-500">${price.toFixed(2)} x {quantity}</div>
+                              <div className="text-gray-500">{formatCurrency(price)} x {quantity}</div>
                             </div>
-                            <div className="font-medium ml-4 text-right">${totalPrice.toFixed(2)}</div>
+                            <div className="font-medium ml-4 text-right">{formatCurrency(totalPrice)}</div>
                           </div>
                         );
                       })
@@ -323,21 +338,33 @@ export default function ReceiptModal({ isOpen, onClose, onNewOrder, orderId, car
 
                     <div className="flex justify-between py-1 text-sm">
                       <span>Subtotal</span>
-                      <span>${orderData?.order && Number(orderData.order.subtotal).toFixed(2)}</span>
+                      <span>
+                        {formatCurrency(orderData?.order?.subtotal !== undefined && orderData?.order?.subtotal !== null
+                          ? Number(orderData.order.subtotal) || 0
+                          : 0)}
+                      </span>
                     </div>
-                    <div className="flex justify-between py-1 text-sm">
-                      <span>Tax ({defaultTaxRate}%)</span>
-                      <span>${orderData?.order && Number(orderData.order.tax).toFixed(2)}</span>
-                    </div>
-                    {orderData?.order && Number(orderData.order.discount) > 0 && (
-                      <div className="flex justify-between py-1 text-sm text-green-500">
+                    {orderData?.order && Number(orderData.order.discount || 0) > 0 && (
+                      <div className="flex justify-between py-1 text-sm text-red-500">
                         <span>Discount</span>
-                        <span>-${Number(orderData.order.discount).toFixed(2)}</span>
+                        <span>-{formatCurrency(Number(orderData.order.discount || 0))}</span>
                       </div>
                     )}
+                    <div className="flex justify-between py-1 text-sm">
+                      <span>Tax ({defaultTaxRate}%)</span>
+                      <span>
+                        {formatCurrency(orderData?.order?.tax !== undefined && orderData?.order?.tax !== null
+                          ? Number(orderData.order.tax) || 0
+                          : 0)}
+                      </span>
+                    </div>
                     <div className="flex justify-between py-1 font-bold">
                       <span>Total</span>
-                      <span>${orderData?.order && Number(orderData.order.total).toFixed(2)}</span>
+                      <span>
+                        {formatCurrency(orderData?.order?.total !== undefined && orderData?.order?.total !== null
+                          ? Number(orderData.order.total) || 0
+                          : 0)}
+                      </span>
                     </div>
 
                     <div className="border-t border-dashed border-gray-300 my-2"></div>
@@ -351,11 +378,23 @@ export default function ReceiptModal({ isOpen, onClose, onNewOrder, orderId, car
                         <>
                           <div className="flex justify-between text-sm">
                             <span>Amount Tendered</span>
-                            <span>${orderData?.order && Number(orderData.order.amountTendered).toFixed(2)}</span>
+                            <span>
+                              {formatCurrency(
+                                orderData?.order?.amountTendered !== undefined && orderData?.order?.amountTendered !== null
+                                  ? Number(orderData.order.amountTendered) || 0
+                                  : 0
+                              )}
+                            </span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span>Change</span>
-                            <span>${orderData?.order && Number(orderData.order.change).toFixed(2)}</span>
+                            <span>
+                              {formatCurrency(
+                                orderData?.order?.change !== undefined && orderData?.order?.change !== null
+                                  ? Number(orderData.order.change) || 0
+                                  : 0
+                              )}
+                            </span>
                           </div>
                         </>
                       )}

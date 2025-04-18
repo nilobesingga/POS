@@ -31,6 +31,7 @@ export interface RolePermissions {
     canManageCategories: boolean;
     canManageOrders: boolean;
     canManageCustomers: boolean;
+    canViewCustomers: boolean;
     canViewReports: boolean;
     canManageSettings: boolean;
     canManageUsers: boolean;
@@ -56,6 +57,7 @@ export const insertRoleSchema = createInsertSchema(roles, {
         canManageCategories: z.boolean().default(false),
         canManageOrders: z.boolean().default(false),
         canManageCustomers: z.boolean().default(false),
+        canViewCustomers: z.boolean().default(false),
         canViewReports: z.boolean().default(false),
         canManageSettings: z.boolean().default(false),
         canManageUsers: z.boolean().default(false)
@@ -212,6 +214,8 @@ export const orders = pgTable("orders", {
     id: serial("id").primaryKey(),
     orderNumber: text("order_number").notNull(),
     customerId: integer("customer_id"),
+    storeId: integer("store_id").references(() => storeSettings.id).notNull(),
+    userId: integer("user_id").references(() => users.id).notNull(),
     status: text("status").notNull().default("completed"),
     subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull(),
     tax: numeric("tax", { precision: 10, scale: 2 }).notNull(),
@@ -221,12 +225,13 @@ export const orders = pgTable("orders", {
     amountTendered: numeric("amount_tendered", { precision: 10, scale: 2 }),
     change: numeric("change", { precision: 10, scale: 2 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
-    cashierId: integer("cashier_id").references(() => users.id),
 });
 
 export const insertOrderSchema = createInsertSchema(orders).pick({
     orderNumber: true,
     customerId: true,
+    storeId: true,
+    userId: true,
     status: true,
     subtotal: true,
     tax: true,
@@ -235,7 +240,6 @@ export const insertOrderSchema = createInsertSchema(orders).pick({
     paymentMethod: true,
     amountTendered: true,
     change: true,
-    cashierId: true,
 });
 
 // Store Settings
@@ -254,6 +258,12 @@ export const storeSettings = pgTable("store_settings", {
     showCashierName: boolean("show_cashier_name").notNull().default(true),
     receiptFooter: text("receipt_footer"),
     isActive: boolean("is_active").notNull().default(true),
+    currencyCode: text("currency_code").notNull().default("USD"),
+    currencySymbol: text("currency_symbol").notNull().default("$"),
+    currencySymbolPosition: text("currency_symbol_position").notNull().default("before"),
+    decimalSeparator: text("decimal_separator").notNull().default("."),
+    thousandsSeparator: text("thousands_separator").notNull().default(","),
+    decimalPlaces: integer("decimal_places").notNull().default(2),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -271,6 +281,12 @@ export const insertStoreSettingsSchema = createInsertSchema(storeSettings).pick(
     showCashierName: true,
     receiptFooter: true,
     isActive: true,
+    currencyCode: true,
+    currencySymbol: true,
+    currencySymbolPosition: true,
+    decimalSeparator: true,
+    thousandsSeparator: true,
+    decimalPlaces: true,
     updatedAt: true
 });
 
@@ -369,6 +385,32 @@ export const insertDiningOptionSchema = createInsertSchema(diningOptions, {
     storeId: z.number().int().positive("Store ID is required"),
     available: z.boolean().default(true),
     isDefault: z.boolean().default(false)
+});
+
+// Shifts
+export const shifts = pgTable("shifts", {
+    id: serial("id").primaryKey(),
+    storeId: integer("store_id").references(() => storeSettings.id).notNull(),
+    userId: integer("user_id").references(() => users.id).notNull(),
+    openingTime: timestamp("opening_time").notNull().defaultNow(),
+    closingTime: timestamp("closing_time"),
+    expectedCashAmount: numeric("expected_cash_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    actualCashAmount: numeric("actual_cash_amount", { precision: 10, scale: 2 }),
+    isActive: boolean("is_active").notNull().default(true),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow()
+});
+
+export const insertShiftSchema = createInsertSchema(shifts, {
+    storeId: z.number().int().positive("Store ID is required"),
+    userId: z.number().int().positive("User ID is required"),
+    openingTime: z.date().default(() => new Date()),
+    closingTime: z.date().optional().nullable(),
+    expectedCashAmount: z.number().default(0),
+    actualCashAmount: z.number().optional().nullable(),
+    isActive: z.boolean().default(true),
+    notes: z.string().optional().nullable(),
 });
 
 // Modifiers
@@ -477,6 +519,9 @@ export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 
 export type Role = typeof roles.$inferSelect & { permissions: RolePermissions };
 export type InsertRole = z.infer<typeof insertRoleSchema>;
+
+export type Shift = typeof shifts.$inferSelect;
+export type InsertShift = z.infer<typeof insertShiftSchema>;
 
 // Custom types for the frontend
 export type CartItem = {

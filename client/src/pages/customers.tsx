@@ -19,6 +19,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ShieldAlert, AlertCircle } from "lucide-react";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PermissionGuard } from "@/components/ui/access-control";
 
 type CustomerFormData = z.infer<typeof insertCustomerSchema>;
 
@@ -31,6 +36,9 @@ export default function CustomersPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
+
+    // Get user permissions
+    const { hasPermission, isLoading: isLoadingPermissions } = usePermissions();
 
     const form = useForm<CustomerFormData>({
         resolver: zodResolver(insertCustomerSchema),
@@ -280,14 +288,21 @@ export default function CustomersPage() {
         setCurrentPage(1);
     }, [searchQuery]);
 
-    if (isLoading) {
+    // Effect to ensure data is fetched when component mounts
+    useEffect(() => {
+        // This will ensure the customers data is fetched when navigating to this page
+    }, []);
+
+    if (isLoading || isLoadingPermissions) {
         return (
-            <div className="container mx-auto py-10">
+            <div className="flex-1 p-6 overflow-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold">Customers</h1>
                 </div>
-                <div className="border rounded-lg p-4">
-                    Loading...
+                <div className="space-y-2">
+                    {Array(5).fill(0).map((_, index) => (
+                        <Skeleton key={index} className="h-16 w-full" />
+                    ))}
                 </div>
             </div>
         );
@@ -295,13 +310,36 @@ export default function CustomersPage() {
 
     if (isError) {
         return (
-            <div className="container mx-auto py-10">
+            <div className="flex-1 p-6 overflow-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold">Customers</h1>
                 </div>
-                <div className="border rounded-lg p-4 text-red-500">
-                    Failed to load customers. Please try again later.
+                <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>
+                        Failed to load customers. Please try again later.
+                    </AlertDescription>
+                </Alert>
+            </div>
+        );
+    }
+
+    // Check if user has no permission to access this page
+    if (!hasPermission("canManageCustomers") && !hasPermission("canViewCustomers")) {
+        return (
+            <div className="flex-1 p-6 overflow-auto">
+                <div className="flex justify-between items-center mb-6">
+                    <h1 className="text-2xl font-bold">Customers</h1>
                 </div>
+                <Alert>
+                    <ShieldAlert className="h-4 w-4" />
+                    <AlertTitle>Access Restricted</AlertTitle>
+                    <AlertDescription>
+                        You don't have permission to view customer information.
+                        Please contact your administrator for access.
+                    </AlertDescription>
+                </Alert>
             </div>
         );
     }
@@ -311,23 +349,29 @@ export default function CustomersPage() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
                 <h1 className="text-2xl font-bold">Customers</h1>
                 <div className="flex gap-4">
-                    <Button
-                        variant="outline"
-                        onClick={() => document.getElementById("importFile")?.click()}
-                        disabled={importMutation.isPending}
-                    >
-                        {importMutation.isPending ? "Importing..." : "Import CSV"}
-                    </Button>
-                    <input
-                        id="importFile"
-                        type="file"
-                        accept=".csv"
-                        className="hidden"
-                        onChange={handleImport}
-                        disabled={importMutation.isPending}
-                    />
+                    <PermissionGuard requiredPermission="canManageCustomers">
+                        <Button
+                            variant="outline"
+                            onClick={() => document.getElementById("importFile")?.click()}
+                            disabled={importMutation.isPending}
+                        >
+                            {importMutation.isPending ? "Importing..." : "Import CSV"}
+                        </Button>
+                        <input
+                            id="importFile"
+                            type="file"
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleImport}
+                            disabled={importMutation.isPending}
+                        />
+                    </PermissionGuard>
+
                     <Button onClick={handleExport}>Export CSV</Button>
-                    <Button onClick={handleAdd}>Add Customer</Button>
+
+                    <PermissionGuard requiredPermission="canManageCustomers">
+                        <Button onClick={handleAdd}>Add Customer</Button>
+                    </PermissionGuard>
                 </div>
             </div>
 
@@ -385,22 +429,27 @@ export default function CustomersPage() {
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex items-center gap-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleEdit(customer)}
-                                            className="h-8"
-                                        >
-                                            Edit
-                                        </Button>
-                                        <Button
-                                            variant="destructive"
-                                            size="sm"
-                                            onClick={() => handleDelete(customer.id)}
-                                            className="h-8"
-                                        >
-                                            Delete
-                                        </Button>
+                                        <PermissionGuard requiredPermission="canManageCustomers">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleEdit(customer)}
+                                                className="h-8"
+                                            >
+                                                Edit
+                                            </Button>
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() => handleDelete(customer.id)}
+                                                className="h-8"
+                                            >
+                                                Delete
+                                            </Button>
+                                        </PermissionGuard>
+                                        {!hasPermission("canManageCustomers") && (
+                                            <span className="text-xs text-muted-foreground">View only</span>
+                                        )}
                                     </div>
                                 </TableCell>
                             </TableRow>
@@ -489,171 +538,175 @@ export default function CustomersPage() {
                 </div>
             </div>
 
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-                <DialogContent className="max-w-3xl">
-                    <DialogHeader>
-                        <DialogTitle>{selectedCustomer ? "Edit Customer" : "Add Customer"}</DialogTitle>
-                    </DialogHeader>
-                    <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <FormField
-                                    name="customerName"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Name</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    name="email"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Email</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} value={field.value || ''} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    name="phone"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Phone</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} value={field.value || ''} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    name="address"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Address</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} value={field.value || ''} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    name="city"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>City</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} value={field.value || ''} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    name="province"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Province/State</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} value={field.value || ''} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    name="postalCode"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Postal Code</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} value={field.value || ''} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    name="country"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Country</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} value={field.value || ''} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    name="customerCode"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Customer Code</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} value={field.value || ''} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    name="pointsBalance"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Points Balance</FormLabel>
-                                            <FormControl>
-                                                <Input
-                                                    type="number"
-                                                    {...field}
-                                                    onChange={e => field.onChange(Number(e.target.value))}
-                                                />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            </div>
-                            <div className="col-span-2">
-                                <FormField
-                                    name="note"
-                                    control={form.control}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Note</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} value={field.value || ''} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            </div>
-                            <DialogFooter>
-                                <Button type="submit">{selectedCustomer ? "Update" : "Create"}</Button>
-                            </DialogFooter>
-                        </form>
-                    </Form>
-                </DialogContent>
-            </Dialog>
+            {/* Customer Form Dialog - Only render if user has permission to manage customers */}
+            <PermissionGuard requiredPermission="canManageCustomers">
+                <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+                    <DialogContent className="max-w-3xl">
+                        <DialogHeader>
+                            <DialogTitle>{selectedCustomer ? "Edit Customer" : "Add Customer"}</DialogTitle>
+                        </DialogHeader>
+                        <Form {...form}>
+                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <FormField
+                                        name="customerName"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Name</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        name="email"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Email</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} value={field.value || ''} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        name="phone"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Phone</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} value={field.value || ''} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        name="address"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Address</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} value={field.value || ''} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        name="city"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>City</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} value={field.value || ''} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        name="province"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Province/State</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} value={field.value || ''} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        name="postalCode"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Postal Code</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} value={field.value || ''} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        name="country"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Country</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} value={field.value || ''} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        name="customerCode"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Customer Code</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} value={field.value || ''} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        name="pointsBalance"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Points Balance</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                                <div className="col-span-2">
+                                    <FormField
+                                        name="note"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Note</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} value={field.value || ''} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                                <DialogFooter>
+                                    <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>Cancel</Button>
+                                    <Button type="submit">{selectedCustomer ? "Update" : "Create"}</Button>
+                                </DialogFooter>
+                            </form>
+                        </Form>
+                    </DialogContent>
+                </Dialog>
+            </PermissionGuard>
         </div>
     );
 }

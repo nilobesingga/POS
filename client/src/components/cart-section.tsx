@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCart } from "@/context/cart-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -7,8 +7,27 @@ import ReceiptModal from "./receipt-modal";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { TaxCategory, StoreSettings, Discount } from "@shared/schema";
+import { useCurrency } from "@/hooks/use-currency";
+
+// Helper functions for safe number operations
+const safeNumber = (value: any, fallback: number = 0): number => {
+  if (value === undefined || value === null) return fallback;
+  const num = Number(value);
+  return isNaN(num) ? fallback : num;
+};
+
+const safeCalculation = (calculation: () => number, fallback: number = 0): number => {
+  try {
+    const result = calculation();
+    return isNaN(result) ? fallback : result;
+  } catch (error) {
+    console.error("Error in calculation:", error);
+    return fallback;
+  }
+};
 
 export default function CartSection() {
+  const { format } = useCurrency();
   const { cart, updateQuantity, removeFromCart, clearCart, updateCart } = useCart();
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -42,30 +61,36 @@ export default function CartSection() {
     }
   });
 
-  // Get default tax rate from tax categories or fall back to store settings rate
+  // Get default tax rate from tax categories or fall back to store settings rate with null safety
   const defaultTaxCategory = taxCategories?.find((cat: TaxCategory) => cat.isDefault);
-  const defaultTaxRate = defaultTaxCategory?.rate ?? Number(storeSettings?.taxRate ?? 8.25);
+  const defaultTaxRate = safeNumber(defaultTaxCategory?.rate ?? storeSettings?.taxRate ?? 8.25);
 
   // Function to apply discount
   const applyDiscount = (discount: Discount | null) => {
     setSelectedDiscount(discount);
     if (discount) {
-      let discountAmount = 0;
+      // Use safe calculation to handle potential errors
+      const discountAmount = safeCalculation(() => {
+        if (!discount.value || cart.subtotal <= 0) return 0;
 
-      // Check for senior citizen discount special case
-      if (discount.name.toLowerCase().includes('senior citizen') || discount.name.toLowerCase().includes('senior')) {
-        // Standard senior citizen discount is typically 20% (may vary by region)
-        const seniorDiscountRate = 0.20; // 20%
-        discountAmount = cart.subtotal * seniorDiscountRate;
-      } else {
-        // Regular discount calculation
-        discountAmount = discount.type === 'percent'
-          ? (cart.subtotal * Number(discount.value)) / 100
-          : Number(discount.value);
-      }
+        // Check for senior citizen discount special case
+        if (discount.name.toLowerCase().includes('senior citizen') || discount.name.toLowerCase().includes('senior')) {
+          // Standard senior citizen discount is typically 20% (may vary by region)
+          const seniorDiscountRate = 0.20; // 20%
+          return cart.subtotal * seniorDiscountRate;
+        }
 
-      // Update cart context with new discount
-      updateCart({ ...cart, discount: Number(discountAmount.toFixed(2)) });
+        // Regular discount calculation with null safety
+        return discount.type === 'percent'
+          ? (cart.subtotal * safeNumber(discount.value, 0)) / 100
+          : safeNumber(discount.value, 0);
+      }, 0);
+
+      // Update cart context with new discount (ensure we have a valid number)
+      updateCart({
+        ...cart,
+        discount: Number(discountAmount.toFixed(2)) || 0
+      });
     } else {
       // Remove discount
       updateCart({ ...cart, discount: 0 });
@@ -84,6 +109,10 @@ export default function CartSection() {
     setIsReceiptModalOpen(false);
     setCompletedOrderId(null);
   };
+
+  useEffect(() => {
+    // Logic to fetch cart-related data when the component mounts
+  }, []);
 
   return (
     <>
@@ -124,10 +153,10 @@ export default function CartSection() {
                 <div className="flex-1">
                   <div className="flex justify-between">
                     <h4 className="font-medium text-base line-clamp-2">{item.name}</h4>
-                    <p className="font-semibold ml-2">${item.totalPrice.toFixed(2)}</p>
+                    <p className="font-semibold ml-2">{format(item.totalPrice)}</p>
                   </div>
                   <div className="flex items-center mt-1">
-                    <span className="text-sm text-gray-500">${item.price.toFixed(2)} x {item.quantity}</span>
+                    <span className="text-sm text-gray-500">{format(item.price)} x {item.quantity}</span>
                   </div>
                   <div className="flex items-center mt-2">
                     <button
@@ -169,39 +198,43 @@ export default function CartSection() {
         <div className="border-t border-gray-200 p-4">
           <div className="flex justify-between py-1">
             <span className="text-gray-600">Subtotal</span>
-            <span className="font-medium">${cart.subtotal.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between py-1">
-            <span className="text-gray-600">Tax ({defaultTaxRate}%)</span>
-            <span className="font-medium">${cart.tax.toFixed(2)}</span>
+            <span className="font-medium">{format(cart.subtotal)}</span>
           </div>
 
           {/* Add Discount Selection */}
           <div className="flex justify-between py-1 items-center">
             <span className="text-gray-600">Discount</span>
             <div className="flex items-center gap-2">
-              <span className="font-medium text-green-500">-${cart.discount.toFixed(2)}</span>
               <select
                 className="text-sm border rounded p-1"
                 value={selectedDiscount?.id || ""}
                 onChange={(e) => {
-                  const discount = discounts?.find(d => d.id === Number(e.target.value)) || null;
+                  const discountId = safeNumber(e.target.value);
+                  const discount = discounts?.find(d => d.id === discountId) || null;
                   applyDiscount(discount);
                 }}
               >
                 <option value="">None</option>
                 {discounts?.map(discount => (
-                  <option key={discount.id} value={discount.id}>
-                    {discount.name} ({discount.type === 'percent' ? `${discount.value}%` : `$${Number(discount.value).toFixed(2)}`})
+                  <option key={discount.id || 'unknown'} value={discount.id || ''}>
+                    {discount.name || 'Unnamed Discount'} (
+                    {discount.type === 'percent'
+                      ? `${safeNumber(discount.value, 0)}%`
+                      : format(safeNumber(discount.value, 0))
+                    })
                   </option>
-                ))}
+                )) || []}
               </select>
+              <span className="font-medium text-red-500">-{format(safeNumber(cart.discount, 0))}</span>
             </div>
           </div>
-
+          <div className="flex justify-between py-1">
+            <span className="text-gray-600">Vat ({defaultTaxRate}%)</span>
+            <span className="font-medium">{format(cart.tax)}</span>
+          </div>
           <div className="flex justify-between py-2 text-lg font-bold">
             <span>Total</span>
-            <span className="text-primary">${cart.total.toFixed(2)}</span>
+            <span className="text-primary">{format(cart.total)}</span>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">

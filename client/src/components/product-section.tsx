@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
+import { useCurrency } from "@/hooks/use-currency";
 
 interface ProductCardProps {
   product: Product;
@@ -14,67 +15,103 @@ interface ProductCardProps {
 }
 
 function ProductCard({ product, onAddToCart }: ProductCardProps) {
-  const stockStatus = !product.inStock
-    ? { text: "Out of stock", className: "bg-danger" }
-    : product.stockQuantity <= 5
-    ? { text: "Low stock", className: "bg-warning" }
-    : { text: "In stock", className: "bg-primary" };
+  const { format } = useCurrency();
+
+  // Helper function to get severity color
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case "severe": return "bg-red-100 text-red-800 border-red-200";
+      case "moderate": return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "mild": return "bg-blue-100 text-blue-800 border-blue-200";
+      default: return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
-      <div className="h-36 bg-gray-200 relative">
-        <img
-          src={product.imageUrl || '/placeholder-product.png'}
-          alt={product.name}
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            target.src = '/placeholder-product.png';
-          }}
-        />
-        <div className={`absolute bottom-0 right-0 m-2 ${stockStatus.className} text-white text-xs font-semibold px-2 py-1 rounded`}>
-          {stockStatus.text}
+    <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
+      <div className="p-4">
+        {/* Fixed aspect ratio container with consistent height */}
+        <div className="relative w-full pb-[100%]">
+          <div className="absolute inset-0 rounded-lg overflow-hidden">
+            {product.imageUrl ? (
+              <img
+                src={product.imageUrl}
+                alt={product.name}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                <span className="text-gray-400">No image</span>
+              </div>
+            )}
+            {/* Out of stock overlay */}
+            {!product.inStock && (
+              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                <span className="text-white font-medium px-3 py-1 bg-red-500 rounded-full text-sm">
+                  Out of Stock
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
-        {product.hasAllergens && (
-          <div className="absolute top-0 right-0 m-2 bg-red-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
-            <span title={Array.isArray(product.allergens) ? product.allergens.map(a => `${a.name} (${a.severity})`).join(', ') : 'Contains allergens'}>
-              Allergens
-            </span>
-          </div>
-        )}
-      </div>
-      <div className="p-3">
-        <h3 className="font-medium text-base mb-1 line-clamp-2">{product.name}</h3>
-        {product.description && (
-          <p className="text-sm text-gray-500 mb-2 line-clamp-1">{product.description}</p>
-        )}
+        {/* Product details section with fixed height */}
+        <div className="mt-4 min-h-[120px] flex flex-col">
+          <h3 className="text-sm font-medium text-gray-900 line-clamp-2 mb-2">{product.name}</h3>
 
-        {product.hasAllergens && (
-          <div className="mt-1 mb-2">
-            <div className="text-xs text-red-600 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <span>
-                Contains allergens
-              </span>
+          {/* Product description */}
+          {typeof product.description === 'string' && product.description && (
+            <p className="text-xs text-gray-500 line-clamp-2 mb-2">
+              {product.description}
+            </p>
+          )}
+
+          {/* Allergen badges */}
+          {product.hasAllergens && Array.isArray(product.allergens) && (
+            <div className="mb-2 flex flex-wrap gap-1">
+              {product.allergens.map((allergen: { name: string; severity?: string }, index: number) => (
+                <span
+                  key={index}
+                  className={`text-xs px-2 py-0.5 rounded-full border ${getSeverityColor(allergen.severity || 'moderate')}`}
+                >
+                  {allergen.name}
+                </span>
+              ))}
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="flex justify-between items-center mt-2">
-          <p className="font-bold text-primary">${Number(product.price).toFixed(2)}</p>
-          <button
-            className={`text-gray-500 hover:text-primary ${!product.inStock ? 'opacity-50 cursor-not-allowed' : ''}`}
-            onClick={() => product.inStock && onAddToCart(product)}
-            disabled={!product.inStock}
-            title={product.inStock ? 'Add to cart' : 'Out of stock'}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-          </button>
+          {/* Additional info badges */}
+          <div className="flex flex-wrap gap-1 mb-2">
+            {product.isTaxable && (
+              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                Taxable
+              </span>
+            )}
+            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+              {product.soldBy === 'weight' ? 'Sold by weight' : 'Sold by unit'}
+            </span>
+            {product.stockQuantity > 0 && (
+              <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">
+                In stock: {product.stockQuantity}
+              </span>
+            )}
+          </div>
+
+          {/* Price and add to cart section - always at the bottom */}
+          <div className="mt-auto flex justify-between items-center">
+            <p className="font-bold text-primary">{format(Number(product.price))}</p>
+            <button
+              className={`text-gray-500 hover:text-primary ${!product.inStock ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => product.inStock && onAddToCart(product)}
+              disabled={!product.inStock}
+              title={product.inStock ? 'Add to cart' : 'Out of stock'}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -165,6 +202,11 @@ export default function ProductSection() {
 
     return matchesSearch && matchesCategory;
   }) ?? [];
+
+  // Effect to ensure data is fetched when component mounts
+  useEffect(() => {
+    // This will ensure products and categories are fetched immediately when the component mounts
+  }, []);
 
   return (
     <div className="md:w-2/3 flex flex-col bg-gray-50 h-full">

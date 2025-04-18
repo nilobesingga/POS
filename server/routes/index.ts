@@ -15,6 +15,7 @@ import authRouter from "./auth.js";
 import modifiersRouter from "./modifiers.js"; // Added import for modifiers
 import discountsRouter from "./discounts.js"; // Added import for discounts
 import allergensRouter from "./allergens.js"; // Added import for allergens
+import shiftsRouter from "./shifts.js"; // Added import for shifts
 
 export async function registerRoutes(app: Express) {
     app.use("/api/categories", categoriesRouter);
@@ -33,4 +34,5 @@ export async function registerRoutes(app: Express) {
     app.use("/api/modifiers", modifiersRouter); // Registered modifiers routes
     app.use("/api/discounts", discountsRouter); // Registered discounts routes
     app.use("/api/allergens", allergensRouter); // Registered allergens routes
+    app.use("/api/shifts", shiftsRouter); // Registered shifts routes
 }

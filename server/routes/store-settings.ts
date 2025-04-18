@@ -41,10 +41,31 @@ const upload = multer({
 
 const router = Router();
 
-// Get all stores
+// Get all active stores
 router.get('/', async (_req, res) => {
     try {
-        const stores = await db.select().from(storeSettings);
+        const stores = await db.select()
+            .from(storeSettings)
+            .where(eq(storeSettings.isActive, true));
+
+        // If no stores exist, create a default store
+        if (stores.length === 0) {
+            const [defaultStore] = await db.insert(storeSettings)
+                .values({
+                    name: "My Store",
+                    taxRate: "8.25",
+                    showLogo: true,
+                    showCashierName: true,
+                    isActive: true,
+                    currencyCode: "USD",
+                    currencySymbol: "$",
+                    updatedAt: new Date()
+                })
+                .returning();
+
+            return res.json([defaultStore]);
+        }
+
         res.json(stores);
     } catch (error) {
         console.error('Failed to fetch stores:', error);

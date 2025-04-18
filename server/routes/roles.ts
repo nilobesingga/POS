@@ -35,6 +35,23 @@ router.get('/:id', async (req, res) => {
     }
 });
 
+// Get role by name
+router.get('/by-name/:name', async (req, res) => {
+    try {
+        const name = req.params.name;
+        const [role] = await db.select().from(roles).where(eq(roles.name, name));
+
+        if (!role) {
+            return res.status(404).json({ error: 'Role not found' });
+        }
+
+        res.json(role);
+    } catch (error) {
+        console.error('Failed to fetch role by name:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Create a new role
 router.post('/', async (req, res) => {
     try {

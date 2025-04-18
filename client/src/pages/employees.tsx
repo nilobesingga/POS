@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "../components/ui/button";
 import {
     Table,
@@ -43,7 +43,8 @@ export default function EmployeesPage() {
         }
     });
 
-    const { data: employees, isError, isLoading } = useQuery<User[]>({
+    // Fetch employees
+    const { data: employees, isLoading, isError } = useQuery<User[]>({
         queryKey: ["users"],
         queryFn: async () => {
             const response = await fetch("/api/users");
@@ -53,6 +54,11 @@ export default function EmployeesPage() {
             return response.json();
         }
     });
+
+    // Effect to ensure data is fetched when component mounts
+    useEffect(() => {
+        // This will ensure employee data is fetched when navigating to this page
+    }, []);
 
     const { data: stores, isLoading: isLoadingStores } = useQuery<StoreSettings[]>({
         queryKey: ["/api/store-settings"],

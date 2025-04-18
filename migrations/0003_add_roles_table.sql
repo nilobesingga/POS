@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS "roles" (
 -- Insert default system roles
 INSERT INTO "roles" ("name", "description", "is_system", "permissions")
 VALUES 
-  ('Admin', 'Full system access with all permissions', true, '{"canManageProducts": true, "canManageCategories": true, "canManageOrders": true, "canManageCustomers": true, "canViewReports": true, "canManageSettings": true, "canManageUsers": true}'),
-  ('Manager', 'Store management access', true, '{"canManageProducts": true, "canManageCategories": true, "canManageOrders": true, "canManageCustomers": true, "canViewReports": true, "canManageSettings": false, "canManageUsers": false}'),
-  ('Cashier', 'POS access for checkout operations', true, '{"canManageProducts": false, "canManageCategories": false, "canManageOrders": true, "canManageCustomers": false, "canViewReports": false, "canManageSettings": false, "canManageUsers": false}')
+  ('Admin', 'Full system access with all permissions', true, '{"canManageProducts": true, "canManageCategories": true, "canManageOrders": true, "canManageCustomers": true, "canViewCustomers": true, "canViewReports": true, "canManageSettings": true, "canManageUsers": true}'),
+  ('Manager', 'Store management access', true, '{"canManageProducts": true, "canManageCategories": true, "canManageOrders": true, "canManageCustomers": true, "canViewCustomers": true, "canViewReports": true, "canManageSettings": false, "canManageUsers": false}'),
+  ('Cashier', 'POS access for checkout operations', true, '{"canManageProducts": false, "canManageCategories": false, "canManageOrders": true, "canManageCustomers": false, "canViewCustomers": true, "canViewReports": false, "canManageSettings": false, "canManageUsers": false}')
 ON CONFLICT DO NOTHING;

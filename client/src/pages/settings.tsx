@@ -48,7 +48,13 @@ export default function SettingsPage() {
         showLogo: true,
         showCashierName: true,
         receiptFooter: "",
-        isActive: true
+        isActive: true,
+        currencyCode: "PHP",
+        currencySymbol: "₱",
+        currencySymbolPosition: "before",
+        decimalSeparator: ".",
+        thousandsSeparator: ",",
+        decimalPlaces: 2
     });
 
     // User management state
@@ -1090,7 +1096,13 @@ export default function SettingsPage() {
             showLogo: store.showLogo,
             showCashierName: store.showCashierName,
             receiptFooter: store.receiptFooter || "",
-            isActive: store.isActive
+            isActive: store.isActive,
+            currencyCode: store.currencyCode || "PHP",
+            currencySymbol: store.currencySymbol || "₱",
+            currencySymbolPosition: store.currencySymbolPosition || "before",
+            decimalSeparator: store.decimalSeparator || ".",
+            thousandsSeparator: store.thousandsSeparator || ",",
+            decimalPlaces: store.decimalPlaces || 2
         });
         setIsAddStoreDialogOpen(true);
     };
@@ -1227,7 +1239,13 @@ export default function SettingsPage() {
             showLogo: true,
             showCashierName: true,
             receiptFooter: "",
-            isActive: true
+            isActive: true,
+            currencyCode: "PHP",
+            currencySymbol: "₱",
+            currencySymbolPosition: "before",
+            decimalSeparator: ".",
+            thousandsSeparator: ",",
+            decimalPlaces: 2
         });
         setSelectedStore(null);
     };
@@ -1491,7 +1509,29 @@ export default function SettingsPage() {
                                                 onChange={handleStoreChange}
                                             />
                                         </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="phone">Phone Number</Label>
+                                            <Input
+                                                id="phone"
+                                                name="phone"
+                                                value={newStore.phone || ""}
+                                                onChange={handleStoreChange}
+                                            />
+                                        </div>
 
+                                        <div className="space-y-2">
+                                            <Label htmlFor="taxRate">Tax Rate (%)</Label>
+                                            <Input
+                                                id="taxRate"
+                                                name="taxRate"
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                max="100"
+                                                value={newStore.taxRate}
+                                                onChange={handleStoreChange}
+                                            />
+                                        </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="address">Address</Label>
                                             <Input
@@ -1535,30 +1575,6 @@ export default function SettingsPage() {
 
                                     {/* Right Column */}
                                     <div className="space-y-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="phone">Phone Number</Label>
-                                            <Input
-                                                id="phone"
-                                                name="phone"
-                                                value={newStore.phone || ""}
-                                                onChange={handleStoreChange}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label htmlFor="taxRate">Tax Rate (%)</Label>
-                                            <Input
-                                                id="taxRate"
-                                                name="taxRate"
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                max="100"
-                                                value={newStore.taxRate}
-                                                onChange={handleStoreChange}
-                                            />
-                                        </div>
-
                                         <div className="space-y-4 p-4 border rounded-lg">
                                             <h3 className="font-medium mb-2">Receipt Settings</h3>
                                             <div className="space-y-4">
@@ -1586,6 +1602,83 @@ export default function SettingsPage() {
                                                         value={newStore.receiptFooter || ""}
                                                         onChange={handleStoreChange}
                                                         rows={3}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4 p-4 border rounded-lg">
+                                            <h3 className="font-medium mb-2">Currency Settings</h3>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="currencyCode">Currency Code</Label>
+                                                    <Input
+                                                        id="currencyCode"
+                                                        name="currencyCode"
+                                                        value={newStore.currencyCode || "PHP"}
+                                                        onChange={handleStoreChange}
+                                                        placeholder="PHP"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="currencySymbol">Currency Symbol</Label>
+                                                    <Input
+                                                        id="currencySymbol"
+                                                        name="currencySymbol"
+                                                        value={newStore.currencySymbol || "₱"}
+                                                        onChange={handleStoreChange}
+                                                        placeholder="₱"
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="currencySymbolPosition">Symbol Position</Label>
+                                                    <Select
+                                                        value={newStore.currencySymbolPosition}
+                                                        onValueChange={(value) => setNewStore(prev => ({...prev, currencySymbolPosition: value}))}
+                                                    >
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select position" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="before">Before (₱100)</SelectItem>
+                                                            <SelectItem value="after">After (100₱)</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="decimalPlaces">Decimal Places</Label>
+                                                    <Input
+                                                        id="decimalPlaces"
+                                                        name="decimalPlaces"
+                                                        type="number"
+                                                        min="0"
+                                                        max="4"
+                                                        value={newStore.decimalPlaces || 2}
+                                                        onChange={handleStoreChange}
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="decimalSeparator">Decimal Separator</Label>
+                                                    <Input
+                                                        id="decimalSeparator"
+                                                        name="decimalSeparator"
+                                                        value={newStore.decimalSeparator || "."}
+                                                        onChange={handleStoreChange}
+                                                        placeholder="."
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="thousandsSeparator">Thousands Separator</Label>
+                                                    <Input
+                                                        id="thousandsSeparator"
+                                                        name="thousandsSeparator"
+                                                        value={newStore.thousandsSeparator || ","}
+                                                        onChange={handleStoreChange}
+                                                        placeholder=","
                                                     />
                                                 </div>
                                             </div>

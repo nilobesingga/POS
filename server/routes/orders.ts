@@ -6,9 +6,36 @@ import {
     insertOrderSchema,
     products
 } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and, gte, lte } from 'drizzle-orm';
 
 const router = Router();
+
+// Helper function to generate order number
+async function generateOrderNumber() {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+
+    // Get count of orders for today to generate sequence
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todayOrders = await db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+            and(
+                gte(orders.createdAt, todayStart),
+                lte(orders.createdAt, todayEnd)
+            )
+        );
+
+    const sequence = (todayOrders.length + 1).toString().padStart(4, '0');
+    return `OR${year}${month}${day}${sequence}`;
+}
 
 // Get all orders
 router.get('/', async (_req, res) => {
@@ -66,56 +93,69 @@ router.post('/', async (req, res) => {
     try {
         const { order: orderData, items } = req.body;
 
+        // Generate order number
+        const orderNumber = await generateOrderNumber();
+
         // Validate order data
         const validatedOrder = insertOrderSchema.parse({
             ...orderData,
+            orderNumber,
             subtotal: orderData.subtotal.toString(),
             tax: orderData.tax.toString(),
             discount: orderData.discount.toString(),
             total: orderData.total.toString(),
-            amountTendered: orderData.amountTendered.toString(),
-            change: orderData.change.toString()
+            amountTendered: orderData.amountTendered?.toString() || orderData.total.toString(),
+            change: orderData.change?.toString() || "0"
         });
 
-        // Create order
-        const [newOrder] = await db
-            .insert(orders)
-            .values(validatedOrder)
-            .returning();
+        // Create order in a transaction to ensure all related operations succeed or fail together
+        const newOrder = await db.transaction(async (tx) => {
+            // Create order
+            const [order] = await tx
+                .insert(orders)
+                .values(validatedOrder)
+                .returning();
 
-        // Create order items
-        const orderItemsData = items.map((item: any) => ({
-            orderId: newOrder.id,
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price
-        }));
+            // Create order items
+            const orderItemsData = items.map((item: any) => ({
+                orderId: order.id,
+                productId: item.productId,
+                quantity: item.quantity,
+                price: item.price.toString() // Ensure price is string
+            }));
 
-        await db.insert(orderItems).values(orderItemsData);
+            await tx.insert(orderItems).values(orderItemsData);
 
-        // Update product stock quantities
-        for (const item of orderItemsData) {
-            const product = await db
-                .select()
-                .from(products)
-                .where(eq(products.id, item.productId));
-
-            if (product.length) {
-                const newQuantity = product[0].stockQuantity - item.quantity;
-                await db
-                    .update(products)
-                    .set({
-                        stockQuantity: Math.max(0, newQuantity),
-                        inStock: newQuantity > 0
-                    })
+            // Update product stock quantities
+            for (const item of orderItemsData) {
+                const [product] = await tx
+                    .select()
+                    .from(products)
                     .where(eq(products.id, item.productId));
+
+                if (product) {
+                    const newQuantity = product.stockQuantity - item.quantity;
+                    await tx
+                        .update(products)
+                        .set({
+                            stockQuantity: Math.max(0, newQuantity),
+                            inStock: newQuantity > 0
+                        })
+                        .where(eq(products.id, item.productId));
+                }
             }
-        }
+
+            return order;
+        });
 
         res.status(201).json(newOrder);
     } catch (error) {
         console.error('Failed to create order:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        if (error instanceof Error) {
+            res.status(500).json({ error: 'Internal server error', message: error.message });
+        } else {
+            res.status(500).json({ error: 'Internal server error' });
+        }
     }
 });
 

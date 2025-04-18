@@ -37,17 +37,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
         // Fetch tax categories
         const taxResponse = await apiRequest("GET", "/api/tax-categories");
         const taxCategories = await taxResponse.json();
-        const defaultCategory = taxCategories.find((cat: TaxCategory) => cat.isDefault);
+        const defaultCategory = Array.isArray(taxCategories) ?
+          taxCategories.find((cat: TaxCategory) => cat.isDefault) : null;
 
         // Fetch store settings
         const settingsResponse = await apiRequest("GET", "/api/store-settings");
         const storeSettings: StoreSettings = await settingsResponse.json();
 
         // Use tax category rate if available, otherwise use store settings rate
-        if (defaultCategory) {
-          setDefaultTaxRate(Number(defaultCategory.rate));
+        if (defaultCategory && defaultCategory.rate) {
+          const rate = Number(defaultCategory.rate);
+          setDefaultTaxRate(isNaN(rate) ? 0 : rate);
         } else if (storeSettings?.taxRate) {
-          setDefaultTaxRate(Number(storeSettings.taxRate));
+          const rate = Number(storeSettings.taxRate);
+          setDefaultTaxRate(isNaN(rate) ? 0 : rate);
         }
       } catch (error) {
         console.error('Failed to fetch tax rate:', error);
@@ -58,20 +61,55 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // Calculate totals whenever items change
   useEffect(() => {
-    const subtotal = cart.items.reduce((sum, item) => sum + item.totalPrice, 0);
-    const taxRate = defaultTaxRate / 100; // Convert percentage to decimal
+    // Safely calculate subtotal with null checks
+    const subtotal = cart.items.reduce((sum, item) => {
+      // Handle potentially null or undefined totalPrice
+      const itemTotal = typeof item.totalPrice === 'number' ? item.totalPrice :
+        typeof item.totalPrice === 'string' ? parseFloat(item.totalPrice) : 0;
+
+      return sum + (isNaN(itemTotal) ? 0 : itemTotal);
+    }, 0);
+
+    // Ensure tax rate is valid
+    const taxRate = (typeof defaultTaxRate === 'number' && !isNaN(defaultTaxRate))
+      ? (defaultTaxRate / 100)
+      : 0; // Convert percentage to decimal
+
     const tax = Number((subtotal * taxRate).toFixed(2));
-    const total = Number((subtotal + tax - cart.discount).toFixed(2));
+
+    // Ensure discount is valid
+    const discount = typeof cart.discount === 'number' && !isNaN(cart.discount)
+      ? cart.discount
+      : 0;
+
+    const total = Number((subtotal + tax - discount).toFixed(2));
 
     setCart(prev => ({
       ...prev,
       subtotal: Number(subtotal.toFixed(2)),
       tax,
-      total
+      total: total < 0 ? 0 : total // Ensure total is never negative
     }));
   }, [cart.items, cart.discount, defaultTaxRate]);
 
   const addToCart = (product: Product, quantity = 1) => {
+    // Guard against null or undefined product
+    if (!product || product.id === undefined) {
+      console.warn('Attempted to add invalid product to cart');
+      return;
+    }
+
+    // Ensure price is a number
+    const productPrice = typeof product.price === 'string' ?
+      Number(product.price) : (typeof product.price === 'number' ?
+        product.price : 0);
+
+    if (isNaN(productPrice)) {
+      console.warn(`Invalid price for product ${product.name}: ${product.price}`);
+    }
+
+    const safePrice = isNaN(productPrice) ? 0 : productPrice;
+
     setCart(prevCart => {
       const existingItemIndex = prevCart.items.findIndex(item => item.productId === product.id);
 
@@ -84,7 +122,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         updatedItems[existingItemIndex] = {
           ...item,
           quantity: newQuantity,
-          totalPrice: Number((Number(product.price) * newQuantity).toFixed(2))
+          totalPrice: Number((safePrice * newQuantity).toFixed(2))
         };
 
         return {
@@ -95,10 +133,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
         // Add new item to cart
         const newItem: CartItem = {
           productId: product.id,
-          name: product.name,
-          price: Number(product.price),
+          name: product.name || `Product #${product.id}`,
+          price: safePrice,
           quantity,
-          totalPrice: Number((Number(product.price) * quantity).toFixed(2))
+          totalPrice: Number((safePrice * quantity).toFixed(2))
         };
 
         return {
@@ -146,38 +184,87 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const checkout = async (paymentMethod: string, amountTendered: number) => {
+    if (!user?.id) {
+      throw new Error("User not authenticated");
+    }
+
+    // Validate input parameters
+    if (!paymentMethod) {
+      throw new Error("Payment method is required");
+    }
+
+    // Ensure amountTendered is a valid number
+    const safeAmountTendered = typeof amountTendered === 'number' && !isNaN(amountTendered)
+      ? amountTendered
+      : typeof amountTendered === 'string' ? parseFloat(amountTendered) : 0;
+
+    if (paymentMethod === 'cash' && safeAmountTendered < cart.total) {
+      throw new Error("Amount tendered must be greater than or equal to the total amount");
+    }
+
     setIsCheckingOut(true);
 
     try {
-      // Generate unique order number with timestamp and random string
-      const timestamp = new Date().getTime();
-      const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const orderNumber = `ORD-${timestamp}-${random}`;
+      // Get the store settings to get the store ID
+      const settingsResponse = await apiRequest("GET", "/api/store-settings");
+      const storeSettings = await settingsResponse.json();
 
-      // Create order DTO with string values for numeric fields
+      // Check if we have any store settings
+      if (!storeSettings || (!Array.isArray(storeSettings) && !storeSettings?.id) || (Array.isArray(storeSettings) && storeSettings.length === 0)) {
+        throw new Error("No active store found. Please configure store settings first.");
+      }
+
+      // If we get an array of stores, use the first active one
+      const activeStore = Array.isArray(storeSettings)
+        ? storeSettings.find(store => store.isActive) || storeSettings[0]
+        : storeSettings;
+
+      if (!activeStore.id) {
+        throw new Error("Invalid store configuration. Please check store settings.");
+      }
+
+      // Ensure all values are valid numbers
+      const safeSubtotal = typeof cart.subtotal === 'number' && !isNaN(cart.subtotal) ? cart.subtotal : 0;
+      const safeTax = typeof cart.tax === 'number' && !isNaN(cart.tax) ? cart.tax : 0;
+      const safeDiscount = typeof cart.discount === 'number' && !isNaN(cart.discount) ? cart.discount : 0;
+      const safeTotal = typeof cart.total === 'number' && !isNaN(cart.total) ? cart.total : 0;
+
+      // Calculate change safely
+      const safeChange = paymentMethod === 'cash'
+        ? Math.max(0, safeAmountTendered - safeTotal)
+        : 0;
+
+      // Create order data with safe values
       const orderData = {
         order: {
-          orderNumber,
+          storeId: activeStore.id,
+          userId: user.id,
           status: "completed",
-          subtotal: cart.subtotal.toFixed(2),
-          tax: cart.tax.toFixed(2),
-          discount: cart.discount.toFixed(2),
-          total: cart.total.toFixed(2),
+          subtotal: safeSubtotal,
+          tax: safeTax,
+          discount: safeDiscount,
+          total: safeTotal,
           paymentMethod,
-          amountTendered: amountTendered.toFixed(2),
-          change: paymentMethod === 'cash' ? (amountTendered - cart.total).toFixed(2) : "0.00",
-          cashierId: user?.id || 1, // Use the current user's ID if available
+          amountTendered: safeAmountTendered,
+          change: safeChange
         },
         items: cart.items.map(item => ({
           productId: item.productId,
-          quantity: item.quantity,
-          price: item.price.toFixed(2),
-          name: item.name,
-          totalPrice: item.totalPrice.toFixed(2)
+          quantity: typeof item.quantity === 'number' ? item.quantity : 1,
+          price: typeof item.price === 'number' && !isNaN(item.price) ? item.price : 0,
+          name: item.name || `Product #${item.productId}`,
+          totalPrice: typeof item.totalPrice === 'number' && !isNaN(item.totalPrice) ?
+            item.totalPrice : 0
         }))
       };
 
       const response = await apiRequest("POST", "/api/orders", orderData);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create order');
+      }
+
       const newOrder = await response.json();
 
       // Clear the cart after successful checkout

@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import Sidebar from "./sidebar";
+import { Sidebar } from "./sidebar";
 import Header from "./header";
 import { CartProvider } from "@/context/cart-context";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ChevronDown, Grid3X3 } from "lucide-react";
+import { useExchangeRates } from '@/hooks/use-exchange-rates';
+import { useCurrency } from '@/hooks/use-currency';
+import { useToast } from "@/hooks/use-toast";
 
 interface BottomNavItemProps {
   icon: JSX.Element;
@@ -14,9 +17,17 @@ interface BottomNavItemProps {
 }
 
 const BottomNavItem = ({ icon, label, href, isActive = false }: BottomNavItemProps) => {
+  const [, setLocation] = useLocation();
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setLocation(href);
+  };
+
   return (
     <a
       href={href}
+      onClick={handleClick}
       className={`flex flex-col items-center p-2 ${isActive ? 'text-primary' : 'text-gray-500'}`}
     >
       {icon}
@@ -45,6 +56,21 @@ const BottomNavItemWithSubmenu = ({ icon, label, isActive = false }: BottomNavIt
 };
 
 export default function POSLayout({ children }: { children: React.ReactNode }) {
+  const { settings } = useCurrency();
+  const { error } = useExchangeRates(settings.currencyCode);
+  const { toast } = useToast();
+
+  // Show error toast if exchange rates fail to load
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Currency Error",
+        description: "Failed to load exchange rates. Some currency conversions may be inaccurate.",
+        variant: "destructive"
+      });
+    }
+  }, [error, toast]);
+
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [location] = useLocation();
   const [isItemsSheetOpen, setIsItemsSheetOpen] = useState(false);
@@ -67,6 +93,12 @@ export default function POSLayout({ children }: { children: React.ReactNode }) {
           "Items";
       case "/reports":
         return "Reports";
+      case "/reports/sales":
+        return "Sales Summary";
+      case "/reports/items":
+        return "Sales by Item";
+      case "/reports/categories":
+        return "Sales by Category";
       case "/settings":
         return "Settings";
       default:
@@ -161,28 +193,48 @@ export default function POSLayout({ children }: { children: React.ReactNode }) {
                 <div className="px-1 py-6">
                   <h3 className="text-lg font-medium mb-4">Items Management</h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <a href="/items/list" className="flex flex-col items-center p-4 border rounded-lg hover:bg-gray-50">
-                      <Grid3X3 className="h-8 w-8 mb-2 text-primary" />
-                      <span>Item List</span>
-                    </a>
-                    <a href="/items/categories" className="flex flex-col items-center p-4 border rounded-lg hover:bg-gray-50">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
-                      <span>Categories</span>
-                    </a>
-                    <a href="/items/modifiers" className="flex flex-col items-center p-4 border rounded-lg hover:bg-gray-50">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                      </svg>
-                      <span>Modifiers</span>
-                    </a>
-                    <a href="/items/discounts" className="flex flex-col items-center p-4 border rounded-lg hover:bg-gray-50">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Discounts</span>
-                    </a>
+                    {[
+                      { href: "/items/list", icon: <Grid3X3 className="h-8 w-8 mb-2 text-primary" />, label: "Item List" },
+                      {
+                        href: "/items/categories",
+                        icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>,
+                        label: "Categories"
+                      },
+                      {
+                        href: "/items/modifiers",
+                        icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                        </svg>,
+                        label: "Modifiers"
+                      },
+                      {
+                        href: "/items/discounts",
+                        icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>,
+                        label: "Discounts"
+                      },
+                    ].map(item => {
+                      const [, setLocation] = useLocation();
+
+                      return (
+                        <a
+                          key={item.href}
+                          href={item.href}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setLocation(item.href);
+                            setIsItemsSheetOpen(false);
+                          }}
+                          className="flex flex-col items-center p-4 border rounded-lg hover:bg-gray-50"
+                        >
+                          {item.icon}
+                          <span>{item.label}</span>
+                        </a>
+                      );
+                    })}
                   </div>
                 </div>
               </SheetContent>

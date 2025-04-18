@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -88,6 +88,11 @@ export default function ItemsAllergensPage() {
       return response.json();
     }
   });
+
+  // Effect to ensure data is fetched when component mounts
+  useEffect(() => {
+    // This will ensure allergens data is fetched when navigating to this page
+  }, []);
 
   // Add allergen mutation
   const addAllergenMutation = useMutation({

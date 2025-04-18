@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../storage";
-import { users } from "../../shared/schema";
+import { users, roles } from "../../shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import { eq } from "drizzle-orm";
@@ -155,6 +155,127 @@ export function authenticateToken(req: any, res: any, next: any) {
         return res.status(403).json({ error: 'Invalid or expired token' });
     }
 }
+
+// Permission check middleware
+export async function checkPermission(requiredPermission: string) {
+    return async (req: any, res: any, next: any) => {
+        try {
+            // User should be added by the authenticateToken middleware
+            if (!req.user || !req.user.role) {
+                return res.status(403).json({ error: 'Unauthorized access' });
+            }
+
+            const userRole = req.user.role;
+
+            // Admin role has all permissions
+            if (userRole === 'admin') {
+                return next();
+            }
+
+            // For system roles, check hardcoded permissions
+            if (userRole === 'manager') {
+                const managerPermissions = {
+                    canManageProducts: true,
+                    canManageCategories: true,
+                    canManageOrders: true,
+                    canManageCustomers: true,
+                    canViewCustomers: true,
+                    canViewReports: true,
+                    canManageSettings: false,
+                    canManageUsers: false
+                };
+
+                if (managerPermissions[requiredPermission as keyof typeof managerPermissions]) {
+                    return next();
+                }
+
+                return res.status(403).json({
+                    error: 'Permission denied',
+                    message: 'Your role does not have the required permissions for this action'
+                });
+            }
+
+            if (userRole === 'cashier') {
+                const cashierPermissions = {
+                    canManageProducts: false,
+                    canManageCategories: false,
+                    canManageOrders: true,
+                    canManageCustomers: false,
+                    canViewCustomers: true,
+                    canViewReports: false,
+                    canManageSettings: false,
+                    canManageUsers: false
+                };
+
+                if (cashierPermissions[requiredPermission as keyof typeof cashierPermissions]) {
+                    return next();
+                }
+
+                return res.status(403).json({
+                    error: 'Permission denied',
+                    message: 'Your role does not have the required permissions for this action'
+                });
+            }
+
+            // For custom roles, fetch from database
+            const [roleData] = await db
+                .select()
+                .from(roles)
+                .where(eq(roles.name, userRole));
+
+            if (!roleData) {
+                return res.status(403).json({
+                    error: 'Invalid role',
+                    message: 'Your user role could not be found'
+                });
+            }
+
+            // Check if the role has the required permission
+            if (roleData.permissions && roleData.permissions[requiredPermission as keyof typeof roleData.permissions]) {
+                return next();
+            }
+
+            // Permission denied
+            return res.status(403).json({
+                error: 'Permission denied',
+                message: 'Your role does not have the required permissions for this action'
+            });
+        } catch (error) {
+            console.error('Permission check error:', error);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+    };
+}
+
+// Get current authenticated user
+router.get("/current", authenticateToken, async (req: any, res: any) => {
+    try {
+        // Authenticated user info is already available in req.user from the middleware
+        const userId = req.user.sub;
+
+        // Fetch the full user details from the database
+        const [currentUser] = await db.select()
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+
+        if (!currentUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Remove sensitive information
+        const { password, ...userWithoutPassword } = currentUser;
+
+        // Return user data
+        res.json(userWithoutPassword);
+    } catch (error) {
+        console.error('Error fetching current user:', error);
+        res.status(500).json({
+            error: 'Failed to fetch current user',
+            message: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
 
 // Refresh token endpoint
 router.post("/refresh-token", async (req, res) => {

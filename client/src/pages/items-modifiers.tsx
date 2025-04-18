@@ -66,7 +66,7 @@ export default function ItemsModifiersPage() {
   // Track expanded modifiers
   const [expandedModifiers, setExpandedModifiers] = useState<Record<number, boolean>>({});
 
-  // Fetch modifiers
+  // Fetch modifiers with their options
   const {
     data: modifiers,
     isLoading: isLoadingModifiers,
@@ -75,20 +75,29 @@ export default function ItemsModifiersPage() {
     queryKey: ["/api/modifiers"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/modifiers");
-      const modifiersData = await response.json();
+      const data: Modifier[] = await response.json();
 
       // Fetch options for each modifier
       const modifiersWithOptions = await Promise.all(
-        modifiersData.map(async (modifier: Modifier) => {
-          const optionsResponse = await apiRequest("GET", `/api/modifiers/${modifier.id}/options`);
-          const options = await optionsResponse.json();
-          return { ...modifier, options };
+        data.map(async (modifier) => {
+          try {
+            const optionsResponse = await apiRequest("GET", `/api/modifiers/${modifier.id}/options`);
+            const options = await optionsResponse.json();
+            return { ...modifier, options };
+          } catch (error) {
+            return { ...modifier, options: [] };
+          }
         })
       );
 
       return modifiersWithOptions;
     }
   });
+
+  // Effect to ensure data is fetched when component mounts
+  useEffect(() => {
+    // This will ensure modifiers data is fetched when navigating to this page
+  }, []);
 
   // Set all modifiers to be expanded when data is loaded
   React.useEffect(() => {

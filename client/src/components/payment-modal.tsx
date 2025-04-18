@@ -5,6 +5,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
+import { useCurrency } from "@/hooks/use-currency";
+
+// Helper for safe parsing of currency values
+const safeParse = (
+  parseFunction: (value: string) => number,
+  value: string | null | undefined,
+  fallback: number = 0
+): number => {
+  if (value === null || value === undefined || value === '') {
+    return fallback;
+  }
+
+  try {
+    const result = parseFunction(value);
+    return isNaN(result) ? fallback : result;
+  } catch (error) {
+    console.error("Error parsing currency value:", error);
+    return fallback;
+  }
+};
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -16,6 +36,7 @@ interface PaymentModalProps {
 export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart }: PaymentModalProps) {
   const { checkout, isCheckingOut } = useCart();
   const { toast } = useToast();
+  const { format, parse, parseNumber } = useCurrency();
 
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
   const [amountTendered, setAmountTendered] = useState<string>("0");
@@ -26,22 +47,29 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart 
 
   // Update amount tendered when cart total changes or payment method changes
   useEffect(() => {
-    if (cart.total > 0 && paymentMethod === 'cash') {
+    if (paymentMethod === 'cash' && cart?.total !== undefined && cart?.total > 0) {
       setAmountTendered(Math.ceil(cart.total).toString());
     }
-  }, [cart.total, paymentMethod]);
+  }, [cart?.total, paymentMethod]);
 
-  // Calculate change
-  const amountTenderedNum = parseFloat(amountTendered) || 0;
-  const change = Math.max(0, amountTenderedNum - cart.total);
+  // Calculate change with null safety
+  const amountTenderedNum = safeParse(parseNumber, amountTendered, 0);
+  const cartTotal = (cart?.total !== undefined && cart?.total !== null) ? cart.total : 0;
+  const change = Math.max(0, amountTenderedNum - cartTotal);
 
   // Quick amount buttons
   const quickAmounts = [1, 5, 10, 20, 50, 100];
 
-  // Handle quick amount selection
+  // Handle quick amount selection with null safety
   const handleQuickAmount = (amount: number) => {
-    const currentAmount = parseFloat(amountTendered) || 0;
-    setAmountTendered((currentAmount + amount).toString());
+    try {
+      const currentAmount = safeParse(parseNumber, amountTendered, 0);
+      setAmountTendered(((currentAmount + amount) || 0).toString());
+    } catch (error) {
+      console.error("Error adding quick amount:", error);
+      // Fallback to just using the amount if there's a parsing error
+      setAmountTendered(amount.toString());
+    }
   };
 
   // Format card number with spaces
@@ -73,7 +101,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart 
   const handleCompletePayment = async () => {
     // Validate based on payment method
     if (paymentMethod === 'cash') {
-      if (amountTenderedNum < cart.total) {
+      if (amountTenderedNum < cartTotal) {
         toast({
           title: "Payment Error",
           description: "Amount tendered must be greater than or equal to the total amount",
@@ -118,7 +146,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart 
     }
 
     try {
-      const orderId = await checkout(paymentMethod, paymentMethod === 'cash' ? amountTenderedNum : cart.total);
+      const orderId = await checkout(paymentMethod, paymentMethod === 'cash' ? amountTenderedNum : cartTotal);
       // Reset form
       setCardNumber("");
       setCardExpiry("");
@@ -156,7 +184,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart 
             <div className="bg-gray-50 p-3 rounded-lg">
               <div className="flex justify-between mb-1">
                 <span className="text-gray-600">Total Amount</span>
-                <span className="font-semibold">${cart.total.toFixed(2)}</span>
+                <span className="font-semibold">{format(cartTotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Customer</span>
@@ -189,7 +217,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart 
                 <h4 className="font-medium mb-2">Amount Tendered</h4>
                 <Input
                   type="text"
-                  value={amountTendered}
+                  value={format(parse(amountTendered))}
                   onChange={(e) => {
                     const value = e.target.value.replace(/[^0-9.]/g, '');
                     setAmountTendered(value);
@@ -206,7 +234,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart 
                     className="bg-gray-100 text-gray-700 rounded p-2 text-center hover:bg-gray-200"
                     onClick={() => handleQuickAmount(amount)}
                   >
-                    +${amount}
+                    +{format(amount)}
                   </button>
                 ))}
               </div>
@@ -214,15 +242,15 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart 
               <div className="bg-gray-50 p-3 rounded-lg space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Amount Tendered</span>
-                  <span className="font-medium">${parseFloat(amountTendered || "0").toFixed(2)}</span>
+                  <span className="font-medium">{format(parse(amountTendered))}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Total</span>
-                  <span className="font-medium">${cart.total.toFixed(2)}</span>
+                  <span className="font-medium">{format(cartTotal)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold border-t border-gray-200 pt-2 mt-2">
                   <span>Change</span>
-                  <span className="text-green-500">${change.toFixed(2)}</span>
+                  <span className="text-green-500">{format(change)}</span>
                 </div>
               </div>
             </div>
@@ -279,7 +307,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart 
             onClick={handleCompletePayment}
             disabled={isCheckingOut}
           >
-            {isCheckingOut ? "Processing..." : `Pay ${cart.total.toFixed(2)}`}
+            {isCheckingOut ? "Processing..." : `Pay ${format(cartTotal)}`}
           </Button>
         </div>
       </div>

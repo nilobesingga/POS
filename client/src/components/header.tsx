@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/context/auth-context";
+import ShiftStatus from "./shift-status";
 
 interface HeaderProps {
   title: string;
@@ -31,6 +32,11 @@ export default function Header({ title, toggleMobileNav }: HeaderProps) {
       </div>
 
       <div className="flex items-center space-x-3">
+        {/* Shift Status Component */}
+        <div className="mr-2">
+          <ShiftStatus />
+        </div>
+        
         <div className="relative">
           <button className="p-1 text-gray-500 hover:text-primary focus:outline-none">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -75,6 +81,12 @@ export default function Header({ title, toggleMobileNav }: HeaderProps) {
             <Link href="/settings">
               <DropdownMenuItem className="cursor-pointer">
                 Settings
+              </DropdownMenuItem>
+            </Link>
+            
+            <Link href="/shift-management">
+              <DropdownMenuItem className="cursor-pointer">
+                Shift Management
               </DropdownMenuItem>
             </Link>
 

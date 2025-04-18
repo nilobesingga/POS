@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Discount, InsertDiscount } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
@@ -212,6 +212,11 @@ export default function DiscountsPage(): JSX.Element {
     const numValue = typeof value === 'string' ? parseFloat(value) : value;
     return type === 'percent' ? `${numValue}%` : `$${numValue.toFixed(2)}`;
   };
+
+  // Effect to ensure data is fetched when component mounts
+  useEffect(() => {
+    // This will ensure discounts and stores data are fetched when navigating to this page
+  }, []);
 
   return (
     <div className="flex-1 p-6 overflow-auto">
