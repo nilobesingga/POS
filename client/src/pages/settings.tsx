@@ -97,6 +97,7 @@ export default function SettingsPage() {
         canManageCategories: true,
         canManageOrders: true,
         canManageCustomers: false,
+        canViewCustomers: false,
         canViewReports: false,
         canManageSettings: false,
         canManageUsers: false
@@ -170,6 +171,7 @@ export default function SettingsPage() {
         canManageCategories: boolean;
         canManageOrders: boolean;
         canManageCustomers: boolean;
+        canViewCustomers: boolean;
         canViewReports: boolean;
         canManageSettings: boolean;
         canManageUsers: boolean;
@@ -888,6 +890,153 @@ export default function SettingsPage() {
         uploadLogoMutation.mutate({ id: selectedStore.id, file });
     };
 
+    // Payment icons renderer
+    const renderPaymentIcon = (code: string, name: string) => {
+        const lowerCode = code.toLowerCase();
+
+        // GCash Icon
+        if (lowerCode.includes('gcash')) {
+            return (
+                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#0057FF] text-white">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M6 12H18M12 6V18" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                </div>
+            );
+        }
+
+        // Maya Icon (PayMaya)
+        if (lowerCode.includes('paymaya') || lowerCode.includes('maya')) {
+            return (
+                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#5CC6C9] text-white">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 5L5 12L12 19L19 12L12 5Z" fill="white" />
+                    </svg>
+                </div>
+            );
+        }
+
+        // GrabPay Icon
+        if (lowerCode.includes('grabpay')) {
+            return (
+                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#00B14F] text-white">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 3L4 9V21H20V9L12 3Z" fill="white" />
+                    </svg>
+                </div>
+            );
+        }
+
+        // Cash Icon
+        if (lowerCode === 'cash') {
+            return (
+                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#2E7D32] text-white">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3.5 8H20.5V16H3.5V8Z" stroke="white" strokeWidth="1.5" />
+                        <circle cx="12" cy="12" r="2.5" stroke="white" strokeWidth="1.5" />
+                    </svg>
+                </div>
+            );
+        }
+
+        // Visa Icon
+        if (lowerCode.includes('visa')) {
+            return (
+                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#1434CB] text-white">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M5 11L7.5 15H13L11 9L9 14.5H6.5L5 11Z" fill="white" stroke="white" strokeWidth="0.5" />
+                    </svg>
+                </div>
+            );
+        }
+
+        // Mastercard Icon
+        if (lowerCode.includes('mastercard')) {
+            return (
+                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#FF5F00] text-white">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="9" cy="12" r="4" fill="#EB001B" />
+                        <circle cx="15" cy="12" r="4" fill="#F79E1B" />
+                        <path fillRule="evenodd" clipRule="evenodd" d="M12 15.5C13.3333 14.5 13.3333 9.5 12 8.5C10.6667 9.5 10.6667 14.5 12 15.5Z" fill="#FF5F00" />
+                    </svg>
+                </div>
+            );
+        }
+
+        // Amex Icon
+        if (lowerCode.includes('amex') || lowerCode.includes('american')) {
+            return (
+                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#006FCF] text-white">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="4" y="6" width="16" height="12" rx="1" fill="#006FCF" />
+                        <path d="M7 12L10 9H14M14 15L11 12" stroke="white" strokeWidth="1.5" />
+                    </svg>
+                </div>
+            );
+        }
+
+        // Gift Card Icon
+        if (lowerCode.includes('gift')) {
+            return (
+                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#AB47BC] text-white">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="8" width="18" height="12" rx="1" fill="#AB47BC" />
+                        <path d="M12 8V20M8 12H16" stroke="white" strokeWidth="1.5" />
+                        <path d="M12 8C12 8 13 5 10 5C7.5 5 9 8 12 8Z" fill="white" />
+                        <path d="M12 8C12 8 11 5 14 5C16.5 5 15 8 12 8Z" fill="white" />
+                    </svg>
+                </div>
+            );
+        }
+
+        // Generic card icon
+        if (lowerCode.includes('card')) {
+            return (
+                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#607D8B] text-white">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="6" width="18" height="12" rx="2" stroke="white" strokeWidth="1.5" />
+                        <path d="M3.5 10H20.5" stroke="white" strokeWidth="1.5" />
+                    </svg>
+                </div>
+            );
+        }
+
+        // Default icon with payment method initial
+        const color = getPaymentIconColor(code);
+        const initials = name.charAt(0).toUpperCase();
+
+        return (
+            <div className="flex items-center justify-center h-6 w-6 rounded-md" style={{ backgroundColor: color }}>
+                <span className="text-white font-medium text-sm">{initials}</span>
+            </div>
+        );
+    };
+
+    const getPaymentIconColor = (code: string) => {
+        const lowerCode = code.toLowerCase();
+
+        if (lowerCode.includes('gcash')) return '#0057FF';
+        if (lowerCode.includes('paymaya') || lowerCode.includes('maya')) return '#5CC6C9';
+        if (lowerCode.includes('grabpay')) return '#00B14F';
+        if (lowerCode.includes('visa')) return '#1434CB';
+        if (lowerCode.includes('mastercard')) return '#FF5F00';
+        if (lowerCode.includes('amex')) return '#006FCF';
+        if (lowerCode === 'cash') return '#2E7D32';
+        if (lowerCode.includes('gift')) return '#AB47BC';
+        if (lowerCode.includes('card')) return '#607D8B';
+
+        // Generate a consistent color based on the code string
+        let hash = 0;
+        for (let i = 0; i < code.length; i++) {
+            hash = code.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const c = (hash & 0x00FFFFFF)
+            .toString(16)
+            .toUpperCase()
+            .padStart(6, '0');
+        return `#${c}`;
+    };
+
     // Form submission handlers
     const handleAddStore = (e: React.FormEvent) => {
         e.preventDefault();
@@ -1066,8 +1215,8 @@ export default function SettingsPage() {
             updateRoleMutation.mutate({
                 id: selectedRole.id,
                 data: {
-                    name: newRole.name,
-                    description: newRole.description,
+                    name: newRole.name || "",
+                    description: newRole.description || "",
                     isSystem: false,
                     permissions: newRole.permissions
                 }
@@ -2302,6 +2451,9 @@ export default function SettingsPage() {
                                                             {role?.permissions?.canManageCustomers && (
                                                                 <Badge variant="outline" className="bg-green-50">Customers</Badge>
                                                             )}
+                                                            {role?.permissions?.canViewCustomers && (
+                                                                <Badge variant="outline" className="bg-green-50">View Customers</Badge>
+                                                            )}
                                                             {role?.permissions?.canViewReports && (
                                                                 <Badge variant="outline" className="bg-green-50">Reports</Badge>
                                                             )}
@@ -2329,6 +2481,7 @@ export default function SettingsPage() {
                                                                             canManageCategories: !!role?.permissions?.canManageCategories,
                                                                             canManageOrders: !!role?.permissions?.canManageOrders,
                                                                             canManageCustomers: !!role?.permissions?.canManageCustomers,
+                                                                            canViewCustomers: !!role?.permissions?.canViewCustomers,
                                                                             canViewReports: !!role?.permissions?.canViewReports,
                                                                             canManageSettings: !!role?.permissions?.canManageSettings,
                                                                             canManageUsers: !!role?.permissions?.canManageUsers
@@ -2501,6 +2654,23 @@ export default function SettingsPage() {
 
                                             <div className="flex items-center space-x-2">
                                                 <Switch
+                                                    id="viewCustomers"
+                                                    checked={newRole.permissions.canViewCustomers}
+                                                    onCheckedChange={(checked) =>
+                                                        setNewRole({
+                                                            ...newRole,
+                                                            permissions: {
+                                                                ...newRole.permissions,
+                                                                canViewCustomers: checked
+                                                            }
+                                                        })
+                                                    }
+                                                />
+                                                <Label htmlFor="viewCustomers">View Customers</Label>
+                                            </div>
+
+                                            <div className="flex items-center space-x-2">
+                                                <Switch
                                                     id="viewReports"
                                                     checked={newRole.permissions.canViewReports}
                                                     onCheckedChange={(checked) =>
@@ -2621,7 +2791,6 @@ export default function SettingsPage() {
                         <Button onClick={() => {
                             setNewDevice({
                                 name: "",
-                                storeId: undefined,
                                 isActive: true
                             });
                             setSelectedDevice(null);
@@ -2857,37 +3026,64 @@ export default function SettingsPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead>Icon</TableHead>
                                     <TableHead>Name</TableHead>
                                     <TableHead>Code</TableHead>
                                     <TableHead>Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {paymentTypes?.map((type) => (
-                                    <TableRow key={type.id}>
-                                        <TableCell>{type.name}</TableCell>
-                                        <TableCell>{type.code}</TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleEditPaymentType(type)}
-                                                >
-                                                    Edit
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="text-red-500 hover:text-red-700"
-                                                    onClick={() => handleDeletePaymentType(type)}
-                                                >
-                                                    Delete
-                                                </Button>
-                                            </div>
+                                {isLoadingPaymentTypes ? (
+                                    Array(3).fill(0).map((_, index) => (
+                                        <TableRow key={index}>
+                                            <TableCell><Skeleton className="h-6 w-6 rounded-md" /></TableCell>
+                                            <TableCell><Skeleton className="h-5 w-[150px]" /></TableCell>
+                                            <TableCell><Skeleton className="h-5 w-[100px]" /></TableCell>
+                                            <TableCell><Skeleton className="h-5 w-[100px]" /></TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    paymentTypes?.filter(type =>
+                                        type.name.toLowerCase().includes(paymentTypeSearchQuery.toLowerCase()) ||
+                                        type.code.toLowerCase().includes(paymentTypeSearchQuery.toLowerCase())
+                                    ).map((type) => (
+                                        <TableRow key={type.id}>
+                                            <TableCell>
+                                                <div className="flex items-center justify-center">
+                                                    {renderPaymentIcon(type.code, type.name)}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>{type.name}</TableCell>
+                                            <TableCell>{type.code}</TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleEditPaymentType(type)}
+                                                    >
+                                                        Edit
+                                                    </Button>
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        onClick={() => handleDeletePaymentType(type)}
+                                                    >
+                                                        Delete
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+
+                                {paymentTypes && paymentTypes.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="text-center py-4 text-gray-500">
+                                            No payment types found. Add a new payment type to get started.
                                         </TableCell>
                                     </TableRow>
-                                ))}
+                                )}
                             </TableBody>
                         </Table>
                     </div>
@@ -2918,15 +3114,119 @@ export default function SettingsPage() {
 
                                     <div className="space-y-2">
                                         <Label htmlFor="code">Code*</Label>
-                                        <Input
-                                            id="code"
-                                            value={newPaymentType.code}
-                                            onChange={(e) => setNewPaymentType({
-                                                ...newPaymentType,
-                                                code: e.target.value
-                                            })}
-                                            required
-                                        />
+                                        <div className="relative">
+                                            <Input
+                                                id="code"
+                                                value={newPaymentType.code}
+                                                onChange={(e) => setNewPaymentType({
+                                                    ...newPaymentType,
+                                                    code: e.target.value
+                                                })}
+                                                required
+                                            />
+
+                                            {newPaymentType.code && (
+                                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                                    {renderPaymentIcon(newPaymentType.code, newPaymentType.name || 'Payment')}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-gray-500">
+                                            Code is used as an internal identifier. Use specific terms like "visa", "gcash", etc. for proper icon display.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2 pt-2">
+                                        <Label>Available Icons</Label>
+                                        <div className="grid grid-cols-4 gap-2 mt-2">
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex flex-col items-center gap-1 h-auto py-2"
+                                                onClick={() => setNewPaymentType({...newPaymentType, code: 'cash'})}
+                                            >
+                                                {renderPaymentIcon('cash', 'Cash')}
+                                                <span className="text-xs">Cash</span>
+                                            </Button>
+
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex flex-col items-center gap-1 h-auto py-2"
+                                                onClick={() => setNewPaymentType({...newPaymentType, code: 'visa'})}
+                                            >
+                                                {renderPaymentIcon('visa', 'Visa')}
+                                                <span className="text-xs">Visa</span>
+                                            </Button>
+
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex flex-col items-center gap-1 h-auto py-2"
+                                                onClick={() => setNewPaymentType({...newPaymentType, code: 'mastercard'})}
+                                            >
+                                                {renderPaymentIcon('mastercard', 'Mastercard')}
+                                                <span className="text-xs">Mastercard</span>
+                                            </Button>
+
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex flex-col items-center gap-1 h-auto py-2"
+                                                onClick={() => setNewPaymentType({...newPaymentType, code: 'gcash'})}
+                                            >
+                                                {renderPaymentIcon('gcash', 'GCash')}
+                                                <span className="text-xs">GCash</span>
+                                            </Button>
+
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex flex-col items-center gap-1 h-auto py-2"
+                                                onClick={() => setNewPaymentType({...newPaymentType, code: 'paymaya'})}
+                                            >
+                                                {renderPaymentIcon('paymaya', 'Maya')}
+                                                <span className="text-xs">Maya</span>
+                                            </Button>
+
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex flex-col items-center gap-1 h-auto py-2"
+                                                onClick={() => setNewPaymentType({...newPaymentType, code: 'grabpay'})}
+                                            >
+                                                {renderPaymentIcon('grabpay', 'GrabPay')}
+                                                <span className="text-xs">GrabPay</span>
+                                            </Button>
+
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex flex-col items-center gap-1 h-auto py-2"
+                                                onClick={() => setNewPaymentType({...newPaymentType, code: 'amex'})}
+                                            >
+                                                {renderPaymentIcon('amex', 'Amex')}
+                                                <span className="text-xs">Amex</span>
+                                            </Button>
+
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex flex-col items-center gap-1 h-auto py-2"
+                                                onClick={() => setNewPaymentType({...newPaymentType, code: 'gift'})}
+                                            >
+                                                {renderPaymentIcon('gift', 'Gift Card')}
+                                                <span className="text-xs">Gift Card</span>
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
 

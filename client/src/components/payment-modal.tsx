@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
-import { Cart } from "@shared/schema";
+import { Cart, PaymentType } from "@shared/schema";
 import { useCart } from "@/context/cart-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import { useCurrency } from "@/hooks/use-currency";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Helper for safe parsing of currency values
 const safeParse = (
@@ -83,6 +86,48 @@ const validateCardNumber = (cardNumber: string): boolean => {
   return (sum % 10) === 0;
 };
 
+// Map payment type codes to card types
+const mapPaymentCodeToCardType = (code: string): CardType | undefined => {
+  const lowerCode = code.toLowerCase();
+  if (lowerCode.includes('visa')) return 'visa';
+  if (lowerCode.includes('master') || lowerCode.includes('mc')) return 'mastercard';
+  if (lowerCode.includes('amex') || lowerCode.includes('american')) return 'amex';
+  if (lowerCode.includes('discover')) return 'discover';
+  if (lowerCode.includes('diners')) return 'dinersclub';
+  if (lowerCode.includes('jcb')) return 'jcb';
+  if (lowerCode.includes('union')) return 'unionpay';
+  return undefined;
+};
+
+// Map payment code to icon
+const getPaymentMethodIcon = (code: string) => {
+  const lowerCode = code.toLowerCase();
+
+  // Digital/Mobile Payment Methods
+  if (lowerCode.includes('gcash')) return { type: 'gcash', color: '#0057FF' };
+  if (lowerCode.includes('paymaya') || lowerCode.includes('maya')) return { type: 'maya', color: '#5CC6C9' };
+  if (lowerCode.includes('grabpay')) return { type: 'grabpay', color: '#00B14F' };
+  if (lowerCode.includes('alipay')) return { type: 'alipay', color: '#00A1E9' };
+  if (lowerCode.includes('wechat')) return { type: 'wechat', color: '#7BB32E' };
+
+  // Card Payment Methods
+  if (lowerCode.includes('visa')) return { type: 'visa', color: '#1434CB' };
+  if (lowerCode.includes('mastercard') || lowerCode.includes('mc')) return { type: 'mastercard', color: '#FF5F00' };
+  if (lowerCode.includes('amex') || lowerCode.includes('american')) return { type: 'amex', color: '#006FCF' };
+  if (lowerCode.includes('discover')) return { type: 'discover', color: '#F26E21' };
+  if (lowerCode.includes('diners')) return { type: 'dinersclub', color: '#0097D0' };
+  if (lowerCode.includes('jcb')) return { type: 'jcb', color: '#0A5299' };
+  if (lowerCode.includes('unionpay')) return { type: 'unionpay', color: '#DE151D' };
+
+  // Other common payment methods
+  if (lowerCode === 'cash') return { type: 'cash', color: '#2E7D32' };
+  if (lowerCode.includes('check') || lowerCode.includes('cheque')) return { type: 'check', color: '#455A64' };
+  if (lowerCode.includes('gift') || lowerCode.includes('voucher')) return { type: 'gift', color: '#AB47BC' };
+
+  // Default icon for unknown payment methods
+  return { type: 'generic', color: '#757575' };
+};
+
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -96,7 +141,10 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
   const { toast } = useToast();
   const { format, parse, parseNumber } = useCurrency();
 
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
+  // Default payment method is cash (for backward compatibility)
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [paymentMethodName, setPaymentMethodName] = useState<string>('Cash');
+
   const [amountTendered, setAmountTendered] = useState<string>("0");
   const [cardNumber, setCardNumber] = useState("");
   const [cardType, setCardType] = useState<CardType>(undefined);
@@ -104,6 +152,19 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
   const [cardCvc, setCardCvc] = useState("");
   const [cardName, setCardName] = useState("");
   const [cardError, setCardError] = useState("");
+
+  // Fetch payment types from settings
+  const { data: paymentTypes, isLoading: isLoadingPaymentTypes } = useQuery<PaymentType[]>({
+    queryKey: ["/api/payment-types"],
+    enabled: isOpen, // Only fetch when modal is open
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/payment-types");
+      return response.json();
+    }
+  });
+
+  // Determine if we need to show card form
+  const isCardPayment = paymentMethod !== 'cash' && paymentTypes?.find(pt => pt.code === paymentMethod)?.name.toLowerCase().includes('card');
 
   // Update amount tendered when cart total changes or payment method changes
   useEffect(() => {
@@ -129,6 +190,20 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
       console.error("Error adding quick amount:", error);
       // Fallback to just using the amount if there's a parsing error
       setAmountTendered(amount.toString());
+    }
+  };
+
+  // Set payment method with name
+  const handleSetPaymentMethod = (code: string, name: string) => {
+    setPaymentMethod(code);
+    setPaymentMethodName(name);
+
+    // If switching to a card payment, pre-detect card type from the payment method name
+    if (name.toLowerCase().includes('card')) {
+      const detectedType = mapPaymentCodeToCardType(code);
+      if (detectedType) {
+        setCardType(detectedType);
+      }
     }
   };
 
@@ -185,7 +260,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
         });
         return;
       }
-    } else {
+    } else if (isCardPayment) {
       // Card payment validation
       if (!cardNumber || cardNumber.replace(/\s/g, '').length < 13) {
         toast({
@@ -221,10 +296,10 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
       const currentMonth = currentDate.getMonth() + 1; // Months are 0-indexed
 
       if (!expMonth || !expYear ||
-          parseInt(expMonth) < 1 ||
-          parseInt(expMonth) > 12 ||
-          parseInt(expYear) < currentYear ||
-          (parseInt(expYear) === currentYear && parseInt(expMonth) < currentMonth)) {
+        parseInt(expMonth) < 1 ||
+        parseInt(expMonth) > 12 ||
+        parseInt(expYear) < currentYear ||
+        (parseInt(expYear) === currentYear && parseInt(expMonth) < currentMonth)) {
         toast({
           title: "Expired Card",
           description: "The card expiry date is invalid or has passed",
@@ -253,6 +328,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
     }
 
     try {
+      // Pass the payment method code for proper tracking in the system
       const orderId = await checkout(paymentMethod, paymentMethod === 'cash' ? amountTenderedNum : cartTotal);
       // Reset form
       setCardNumber("");
@@ -331,6 +407,77 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
     );
   };
 
+  // Payment Method Icon Component
+  const PaymentMethodIcon = ({ code, name }: { code: string, name: string }) => {
+    const { type, color } = getPaymentMethodIcon(code);
+    const initials = name.charAt(0).toUpperCase();
+
+    // GCash Icon
+    if (type === 'gcash') {
+      return (
+        <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#0057FF] text-white">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 12H18M12 6V18" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      );
+    }
+
+    // Maya Icon (PayMaya)
+    if (type === 'maya') {
+      return (
+        <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#5CC6C9] text-white">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 5L5 12L12 19L19 12L12 5Z" fill="white" />
+          </svg>
+        </div>
+      );
+    }
+
+    // GrabPay Icon
+    if (type === 'grabpay') {
+      return (
+        <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#00B14F] text-white">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3L4 9V21H20V9L12 3Z" fill="white" />
+          </svg>
+        </div>
+      );
+    }
+
+    // Cash Icon
+    if (type === 'cash') {
+      return (
+        <div className="flex items-center justify-center h-6 w-6 rounded-md bg-[#2E7D32] text-white">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3.5 8H20.5V16H3.5V8Z" stroke="white" strokeWidth="1.5" />
+            <circle cx="12" cy="12" r="2.5" stroke="white" strokeWidth="1.5" />
+          </svg>
+        </div>
+      );
+    }
+
+    // Credit Card Icon
+    if (type === 'visa' || type === 'mastercard' || type === 'amex' || type === 'discover' ||
+        type === 'dinersclub' || type === 'jcb' || type === 'unionpay') {
+      return (
+        <div className="flex items-center justify-center h-6 w-6 rounded-md" style={{ backgroundColor: color }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="6" width="18" height="12" rx="2" stroke="white" strokeWidth="1.5" />
+            <path d="M3.5 10H20.5" stroke="white" strokeWidth="1.5" />
+          </svg>
+        </div>
+      );
+    }
+
+    // Default icon with payment method initial
+    return (
+      <div className="flex items-center justify-center h-6 w-6 rounded-md" style={{ backgroundColor: color }}>
+        <span className="text-white font-medium text-sm">{initials}</span>
+      </div>
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -364,20 +511,43 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
 
           <div className="mb-4">
             <h4 className="font-medium mb-2">Payment Method</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                className={paymentMethod === 'cash' ? 'bg-primary text-white' : 'bg-white text-gray-700 border border-gray-300'}
-                onClick={() => setPaymentMethod('cash')}
-              >
-                Cash
-              </Button>
-              <Button
-                className={paymentMethod === 'card' ? 'bg-primary text-white' : 'bg-white text-gray-700 border border-gray-300'}
-                onClick={() => setPaymentMethod('card')}
-              >
-                Card
-              </Button>
-            </div>
+            {isLoadingPaymentTypes ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : !paymentTypes || paymentTypes.length === 0 ? (
+              // Fall back to default payment methods if none are configured
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  className={`${paymentMethod === 'cash' ? 'bg-primary text-white' : 'bg-white text-gray-700 border border-gray-300'} flex items-center gap-2`}
+                  onClick={() => handleSetPaymentMethod('cash', 'Cash')}
+                >
+                  <PaymentMethodIcon code="cash" name="Cash" />
+                  Cash
+                </Button>
+                <Button
+                  className={`${paymentMethod === 'card' ? 'bg-primary text-white' : 'bg-white text-gray-700 border border-gray-300'} flex items-center gap-2`}
+                  onClick={() => handleSetPaymentMethod('card', 'Card')}
+                >
+                  <PaymentMethodIcon code="card" name="Card" />
+                  Card
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {/* Display payment types from settings */}
+                {paymentTypes.map((pt) => (
+                  <Button
+                    key={pt.id}
+                    className={`${paymentMethod === pt.code ? 'bg-primary text-white' : 'bg-white text-gray-700 border border-gray-300'} flex items-center gap-2`}
+                    onClick={() => handleSetPaymentMethod(pt.code, pt.name)}
+                  >
+                    <PaymentMethodIcon code={pt.code} name={pt.name} />
+                    {pt.name}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
 
           {paymentMethod === 'cash' ? (
@@ -423,7 +593,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
                 </div>
               </div>
             </div>
-          ) : (
+          ) : isCardPayment ? (
             <div className="space-y-4">
               <div className="relative">
                 <Label htmlFor="cardNumber">Card Number</Label>
@@ -501,6 +671,17 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
                 </div>
               </div>
             </div>
+          ) : (
+            // Generic non-cash, non-card payment method
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 rounded-lg text-center">
+                <div className="flex justify-center mb-2">
+                  <PaymentMethodIcon code={paymentMethod} name={paymentMethodName} />
+                </div>
+                <p>Complete payment using {paymentMethodName}</p>
+                <p className="text-sm text-gray-500 mt-2">Amount: {format(cartTotal)}</p>
+              </div>
+            </div>
           )}
 
           <Button
@@ -508,7 +689,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
             onClick={handleCompletePayment}
             disabled={isCheckingOut}
           >
-            {isCheckingOut ? "Processing..." : `Pay ${format(cartTotal)}`}
+            {isCheckingOut ? "Processing..." : `Pay ${format(cartTotal)} with ${paymentMethodName}`}
           </Button>
         </div>
       </div>

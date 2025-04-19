@@ -36,6 +36,21 @@ export default function ShiftVerification() {
   // Current active shift
   const activeShift = activeShifts && activeShifts.length > 0 ? activeShifts[0] : null;
 
+  // Determine if user needs shift verification (only cashiers need to verify shifts)
+  const needsShiftVerification = currentUser?.role === 'cashier';
+
+  // Automatically redirect to shift management if cashier with no shift
+  useEffect(() => {
+    if (!isLoadingUser && !isLoadingShift && needsShiftVerification && !activeShift) {
+      // Auto-redirect after a short delay
+      const timer = setTimeout(() => {
+        navigate("/shift-management");
+      }, 300); // 3 second delay before auto-redirect
+
+      return () => clearTimeout(timer);
+    }
+  }, [currentUser, activeShift, isLoadingUser, isLoadingShift, navigate, needsShiftVerification]);
+
   const handleStartShift = () => {
     navigate("/shift-management");
   };
@@ -48,7 +63,8 @@ export default function ShiftVerification() {
     );
   }
 
-  if (!activeShift) {
+  // Only require shift verification for cashiers
+  if (needsShiftVerification && !activeShift) {
     return (
       <div className="h-full flex items-center justify-center">
         <Card className="max-w-md w-full">
@@ -58,13 +74,16 @@ export default function ShiftVerification() {
               Shift Required
             </CardTitle>
             <CardDescription>
-              You need to start a shift before you can use the POS
+              You need to start a shift before you can use the POS system
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <p className="mb-4">
+              As a cashier, you are required to start a shift before you can process transactions.
+              You will be redirected to the shift management page in a few seconds.
+            </p>
             <p className="mb-6">
-              Starting a shift allows you to track your cash drawer and transactions during your work period.
-              After starting a shift, you'll be able to:
+              Starting a shift allows you to:
             </p>
             <ul className="list-disc pl-5 space-y-1 mb-6">
               <li>Process sales transactions</li>
