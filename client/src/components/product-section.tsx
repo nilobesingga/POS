@@ -180,7 +180,7 @@ function ProductCard({ product, onAddToCart }: ProductCardProps) {
           <div className="flex flex-wrap gap-1 mb-2">
             {product.isTaxable && (
               <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                Taxable
+                Vatable
               </span>
             )}
             <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">

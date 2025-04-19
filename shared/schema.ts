@@ -538,4 +538,5 @@ export type Cart = {
     tax: number;
     discount: number;
     total: number;
+    customerId?: number | null;
 };

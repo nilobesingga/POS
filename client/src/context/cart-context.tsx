@@ -19,7 +19,8 @@ const defaultCart: Cart = {
   subtotal: 0,
   tax: 0,
   discount: 0,
-  total: 0
+  total: 0,
+  customerId: null
 };
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -239,6 +240,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         order: {
           storeId: activeStore.id,
           userId: user.id,
+          customerId: cart.customerId || null,
           status: "completed",
           subtotal: safeSubtotal,
           tax: safeTax,

@@ -31,9 +31,10 @@ interface PaymentModalProps {
   onClose: () => void;
   onPaymentComplete: (orderId: number) => void;
   cart: Cart;
+  customerName?: string;
 }
 
-export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart }: PaymentModalProps) {
+export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart, customerName = "Walk-in Customer" }: PaymentModalProps) {
   const { checkout, isCheckingOut } = useCart();
   const { toast } = useToast();
   const { format, parse, parseNumber } = useCurrency();
@@ -188,7 +189,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart 
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Customer</span>
-                <span>Walk-in Customer</span>
+                <span>{customerName}</span>
               </div>
             </div>
           </div>

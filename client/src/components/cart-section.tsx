@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCart } from "@/context/cart-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -6,8 +6,16 @@ import PaymentModal from "./payment-modal";
 import ReceiptModal from "./receipt-modal";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { TaxCategory, StoreSettings, Discount } from "@shared/schema";
+import { TaxCategory, StoreSettings, Discount, Customer } from "@shared/schema";
 import { useCurrency } from "@/hooks/use-currency";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 // Helper functions for safe number operations
 const safeNumber = (value: any, fallback: number = 0): number => {
@@ -33,6 +41,12 @@ export default function CartSection() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [completedOrderId, setCompletedOrderId] = useState<number | null>(null);
   const [selectedDiscount, setSelectedDiscount] = useState<Discount | null>(null);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const customerSearchRef = useRef<HTMLDivElement>(null);
 
   // Fetch tax categories to get default tax rate
   const { data: taxCategories } = useQuery({
@@ -57,6 +71,15 @@ export default function CartSection() {
     queryKey: ["/api/discounts"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/discounts");
+      return response.json();
+    }
+  });
+
+  // Fetch customers
+  const { data: customers } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/customers");
       return response.json();
     }
   });
@@ -110,6 +133,45 @@ export default function CartSection() {
     setCompletedOrderId(null);
   };
 
+  // Handle click outside for customer dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (customerSearchRef.current && !customerSearchRef.current.contains(event.target as Node)) {
+        setShowCustomerSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Filter customers when search query changes
+  useEffect(() => {
+    if (customers && searchQuery) {
+      const filtered = customers.filter(customer =>
+        customer.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (customer.email?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+        (customer.phone?.toLowerCase() || "").includes(searchQuery.toLowerCase())
+      );
+      setFilteredCustomers(filtered);
+    } else {
+      setFilteredCustomers([]);
+    }
+  }, [searchQuery, customers]);
+
+  // Select customer and update cart
+  const selectCustomer = (customer: Customer | null) => {
+    setSelectedCustomer(customer);
+    updateCart({
+      ...cart,
+      customerId: customer?.id || null
+    });
+    setSearchQuery("");
+    setShowCustomerSuggestions(false);
+  };
+
   useEffect(() => {
     // Logic to fetch cart-related data when the component mounts
   }, []);
@@ -128,12 +190,103 @@ export default function CartSection() {
               Clear All
             </button>
           </div>
-          <div className="mt-2 flex items-center p-2 bg-gray-50 rounded-lg">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            <span className="text-gray-500">Walk-in Customer</span>
-            <button className="ml-auto text-primary text-sm font-medium">Change</button>
+          <div className="mt-2 relative" ref={customerSearchRef}>
+            <div className="flex items-center p-2 bg-gray-50 rounded-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              {selectedCustomer ? (
+                <span className="text-gray-700 flex-1">{selectedCustomer.customerName}</span>
+              ) : (
+                <input
+                  type="text"
+                  className="bg-transparent border-none outline-none text-gray-700 w-full placeholder:text-gray-500"
+                  placeholder="Search customer..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowCustomerSuggestions(true);
+                  }}
+                  onFocus={() => setShowCustomerSuggestions(true)}
+                />
+              )}
+              {selectedCustomer ? (
+                <button
+                  className="ml-auto text-primary text-sm font-medium"
+                  onClick={() => {
+                    setSelectedCustomer(null);
+                    updateCart({
+                      ...cart,
+                      customerId: null
+                    });
+                  }}
+                >
+                  Change
+                </button>
+              ) : (
+                <button
+                  className="ml-auto text-primary text-sm font-medium"
+                  onClick={() => setIsCustomerModalOpen(true)}
+                >
+                  All
+                </button>
+              )}
+            </div>
+
+            {/* Customer Suggestions Dropdown */}
+            {showCustomerSuggestions && (searchQuery || !selectedCustomer) && (
+              <div className="absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg max-h-60 overflow-auto border border-gray-200">
+                <div
+                  className="p-2 hover:bg-gray-100 cursor-pointer flex items-center"
+                  onClick={() => selectCustomer(null)}
+                >
+                  <div className="rounded-full bg-gray-200 w-8 h-8 flex items-center justify-center mr-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium">Walk-in Customer</div>
+                  </div>
+                </div>
+
+                {filteredCustomers.slice(0, 5).map((customer) => (
+                  <div
+                    key={customer.id}
+                    className="p-2 hover:bg-gray-100 cursor-pointer flex items-center"
+                    onClick={() => selectCustomer(customer)}
+                  >
+                    <div className="rounded-full bg-blue-100 w-8 h-8 flex items-center justify-center mr-2">
+                      <span className="text-blue-600 font-semibold">
+                        {customer.customerName.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium">{customer.customerName}</div>
+                      <div className="text-xs text-gray-500">
+                        {customer.phone && <span className="mr-2">{customer.phone}</span>}
+                        {customer.email && <span>{customer.email}</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {searchQuery && filteredCustomers.length === 0 && (
+                  <div className="p-3 text-center text-gray-500">
+                    No customers found
+                  </div>
+                )}
+
+                {filteredCustomers.length > 5 && (
+                  <div
+                    className="p-2 text-center text-primary hover:bg-gray-100 cursor-pointer border-t"
+                    onClick={() => setIsCustomerModalOpen(true)}
+                  >
+                    View all {filteredCustomers.length} results
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -262,6 +415,7 @@ export default function CartSection() {
         onClose={() => setIsPaymentModalOpen(false)}
         onPaymentComplete={handlePaymentComplete}
         cart={cart}
+        customerName={selectedCustomer ? selectedCustomer.customerName : "Walk-in Customer"}
       />
 
       {/* Receipt Modal */}
@@ -272,6 +426,158 @@ export default function CartSection() {
         orderId={completedOrderId}
         cart={cart}
       />
+
+      {/* Customer Modal */}
+      <Dialog open={isCustomerModalOpen} onOpenChange={setIsCustomerModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Select Customer</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <Input
+              placeholder="Search customers by name, phone, or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="mb-4"
+            />
+            <div className="max-h-[350px] overflow-y-auto border rounded-md">
+              <div className="p-3 border-b hover:bg-gray-100 cursor-pointer flex items-center" onClick={() => {
+                setSelectedCustomer(null);
+                updateCart({
+                  ...cart,
+                  customerId: null
+                });
+                setIsCustomerModalOpen(false);
+              }}>
+                <div className="rounded-full bg-gray-200 w-10 h-10 flex items-center justify-center mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <div className="font-medium">Walk-in Customer</div>
+                  <div className="text-xs text-gray-500">Default customer</div>
+                </div>
+                {selectedCustomer === null && (
+                  <div className="bg-blue-100 text-blue-600 rounded-full px-2 py-1 text-xs font-medium">
+                    Selected
+                  </div>
+                )}
+              </div>
+
+              {customers && customers.filter(customer =>
+                customer.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (customer.email?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+                (customer.phone?.toLowerCase() || "").includes(searchQuery.toLowerCase())
+              ).map((customer) => (
+                <div
+                  key={customer.id}
+                  className="p-3 border-b hover:bg-gray-100 cursor-pointer flex items-center"
+                  onClick={() => {
+                    setSelectedCustomer(customer);
+                    updateCart({
+                      ...cart,
+                      customerId: customer.id
+                    });
+                    setIsCustomerModalOpen(false);
+                  }}
+                >
+                  <div className="rounded-full bg-blue-100 w-10 h-10 flex items-center justify-center mr-3">
+                    <span className="text-blue-600 font-semibold">
+                      {customer.customerName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium flex items-center gap-2">
+                      {customer.customerName}
+                      {Number(customer.pointsBalance) > 0 && (
+                        <span className="bg-green-100 text-green-600 rounded-full px-2 py-0.5 text-xs">
+                          {customer.pointsBalance} Points
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 flex flex-wrap gap-x-3">
+                      {customer.email && (
+                        <span className="inline-flex items-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          {customer.email}
+                        </span>
+                      )}
+                      {customer.phone && (
+                        <span className="inline-flex items-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          {customer.phone}
+                        </span>
+                      )}
+                      {customer.city && (
+                        <span className="inline-flex items-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          {customer.city}
+                        </span>
+                      )}
+                    </div>
+                    {(safeNumber(customer.totalVisits) > 0 || safeNumber(customer.totalSpent) > 0) && (
+                      <div className="text-xs text-gray-600 mt-1">
+                        {safeNumber(customer.totalVisits) > 0 && (
+                          <span className="mr-3">Visits: {customer.totalVisits}</span>
+                        )}
+                        {safeNumber(customer.totalSpent) > 0 && (
+                          <span>Total: {format(safeNumber(customer.totalSpent))}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {selectedCustomer?.id === customer.id && (
+                    <div className="bg-blue-100 text-blue-600 rounded-full px-2 py-1 text-xs font-medium">
+                      Selected
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {customers && searchQuery && !customers.some(customer =>
+                customer.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (customer.email?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+                (customer.phone?.toLowerCase() || "").includes(searchQuery.toLowerCase())
+              ) && (
+                <div className="p-4 text-center text-gray-500 flex flex-col items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <p>No customers found matching "{searchQuery}"</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchQuery("");
+                setIsCustomerModalOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              className="ml-2"
+              onClick={() => {
+                window.open("/customers");
+              }}
+            >
+              Manage Customers
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
