@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modifier, ModifierOption } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import { Plus, Pencil, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 
 // UI Components
@@ -273,9 +274,12 @@ export default function ItemsModifiersPage() {
     }));
   };
 
-  // Update the display of price
-  const formatPrice = (price: string) => {
-    return Number(price).toFixed(2);
+  // Use currency hook for formatting
+  const { format } = useCurrency();
+
+  // Format price using currency utilities
+  const formatPrice = (price: string | number) => {
+    return format(price);
   };
 
   // Handle modifier actions
@@ -478,7 +482,7 @@ export default function ItemsModifiersPage() {
                             <div>
                               <span className="font-medium">{option.name}</span>
                               <span className="ml-2 text-sm text-gray-500">
-                                ${formatPrice(option.price)}
+                                {formatPrice(option.price)}
                               </span>
                             </div>
                             <div className="flex space-x-2">
@@ -633,11 +637,23 @@ export default function ItemsModifiersPage() {
                 <Label htmlFor="optionPrice">Price</Label>
                 <Input
                   id="optionPrice"
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   value={newOption.price}
-                  onChange={(e) => setNewOption(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
+                  onChange={(e) => {
+                    // Parse the string input into a number for internal storage
+                    const numValue = parseFloat(e.target.value.replace(/[^\d.]/g, '')) || 0;
+                    setNewOption(prev => ({ ...prev, price: numValue }));
+                  }}
+                  onBlur={(e) => {
+                    // Format the price on blur for better user feedback
+                    e.target.value = formatPrice(newOption.price);
+                  }}
+                  onFocus={(e) => {
+                    // Show plain number on focus for easier editing
+                    e.target.value = newOption.price.toString();
+                  }}
+                  placeholder="0.00"
                 />
               </div>
             </div>
@@ -677,11 +693,23 @@ export default function ItemsModifiersPage() {
                 <Label htmlFor="editOptionPrice">Price</Label>
                 <Input
                   id="editOptionPrice"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={selectedOption ? Number(selectedOption.price) : 0}
-                  onChange={(e) => setSelectedOption(prev => prev ? {...prev, price: e.target.value} : null)}
+                  type="text"
+                  inputMode="decimal"
+                  value={selectedOption ? selectedOption.price : 0}
+                  onChange={(e) => {
+                    const numValue = parseFloat(e.target.value.replace(/[^\d.]/g, '')) || 0;
+                    setSelectedOption(prev => prev ? {...prev, price: numValue.toString()} : null);
+                  }}
+                  onBlur={(e) => {
+                    if (selectedOption) {
+                      e.target.value = formatPrice(selectedOption.price);
+                    }
+                  }}
+                  onFocus={(e) => {
+                    if (selectedOption) {
+                      e.target.value = selectedOption.price.toString();
+                    }
+                  }}
                 />
               </div>
             </div>

@@ -14,8 +14,33 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import { usePermissions } from "@/hooks/use-permissions";
+import { format } from "date-fns";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Clock,
+  AlertCircle,
+  MoreVertical,
+  Ban,
+} from "lucide-react";
 
 // Helper functions for safe number operations
 const safeNumber = (value: any, fallback: number = 0): number => {
@@ -35,8 +60,21 @@ const safeCalculation = (calculation: () => number, fallback: number = 0): numbe
 };
 
 export default function CartSection() {
-  const { format } = useCurrency();
-  const { cart, updateQuantity, removeFromCart, clearCart, updateCart } = useCart();
+  const { format: formatCurrency } = useCurrency();
+  const { hasPermission } = usePermissions();
+  const {
+    cart,
+    updateQuantity,
+    removeFromCart,
+    clearCart,
+    updateCart,
+    holdOrder,
+    heldOrders,
+    retrieveHeldOrder,
+    deleteHeldOrder,
+    voidItem,
+    voidOrder
+  } = useCart();
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [completedOrderId, setCompletedOrderId] = useState<number | null>(null);
@@ -48,7 +86,22 @@ export default function CartSection() {
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const customerSearchRef = useRef<HTMLDivElement>(null);
 
-  // Fetch tax categories to get default tax rate
+  const [isManagerAuthModalOpen, setIsManagerAuthModalOpen] = useState(false);
+  const [managerUsername, setManagerUsername] = useState("");
+  const [managerPassword, setManagerPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [pendingDiscount, setPendingDiscount] = useState<Discount | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [managerAuthGranted, setManagerAuthGranted] = useState(false);
+
+  // New states for order management modals
+  const [isHoldOrderModalOpen, setIsHoldOrderModalOpen] = useState(false);
+  const [holdOrderName, setHoldOrderName] = useState("");
+  const [isHeldOrdersListOpen, setIsHeldOrdersListOpen] = useState(false);
+  const [isVoidItemDialogOpen, setIsVoidItemDialogOpen] = useState(false);
+  const [isVoidOrderDialogOpen, setIsVoidOrderDialogOpen] = useState(false);
+  const [voidItemId, setVoidItemId] = useState<number | null>(null);
+
   const { data: taxCategories } = useQuery({
     queryKey: ["/api/tax-categories"],
     queryFn: async () => {
@@ -57,7 +110,6 @@ export default function CartSection() {
     }
   });
 
-  // Fetch store settings for default tax rate
   const { data: storeSettings } = useQuery<StoreSettings>({
     queryKey: ["/api/store-settings"],
     queryFn: async () => {
@@ -66,7 +118,6 @@ export default function CartSection() {
     }
   });
 
-  // Fetch available discounts
   const { data: discounts } = useQuery<Discount[]>({
     queryKey: ["/api/discounts"],
     queryFn: async () => {
@@ -75,7 +126,6 @@ export default function CartSection() {
     }
   });
 
-  // Fetch customers
   const { data: customers } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
     queryFn: async () => {
@@ -84,56 +134,143 @@ export default function CartSection() {
     }
   });
 
-  // Get default tax rate from tax categories or fall back to store settings rate with null safety
   const defaultTaxCategory = taxCategories?.find((cat: TaxCategory) => cat.isDefault);
   const defaultTaxRate = safeNumber(defaultTaxCategory?.rate ?? storeSettings?.taxRate ?? 8.25);
 
-  // Function to apply discount
+  // Handle holding an order
+  const handleHoldOrder = () => {
+    if (cart.items.length === 0) return;
+    setIsHoldOrderModalOpen(true);
+  };
+
+  // Save held order
+  const saveHeldOrder = () => {
+    holdOrder(holdOrderName);
+    setHoldOrderName("");
+    setIsHoldOrderModalOpen(false);
+  };
+
+  // Handle retrieving a held order
+  const handleRetrieveHeldOrder = (id: string) => {
+    retrieveHeldOrder(id);
+    setIsHeldOrdersListOpen(false);
+  };
+
+  // Handle deleting a held order
+  const handleDeleteHeldOrder = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    deleteHeldOrder(id);
+  };
+
+  // Handle voiding an item
+  const handleVoidItem = (productId: number) => {
+    setVoidItemId(productId);
+    setIsVoidItemDialogOpen(true);
+  };
+
+  // Confirm void item
+  const confirmVoidItem = () => {
+    if (voidItemId !== null) {
+      voidItem(voidItemId);
+      setVoidItemId(null);
+    }
+    setIsVoidItemDialogOpen(false);
+  };
+
+  // Handle voiding the entire order
+  const handleVoidOrder = () => {
+    if (cart.items.length === 0) return;
+    setIsVoidOrderDialogOpen(true);
+  };
+
+  // Confirm void order
+  const confirmVoidOrder = () => {
+    voidOrder();
+    setIsVoidOrderDialogOpen(false);
+  };
+
+  const requestDiscountAuth = (discount: Discount | null) => {
+    if (!discount) {
+      applyDiscount(discount);
+      return;
+    }
+
+    if (hasPermission("canManageCustomers")) {
+      setManagerAuthGranted(true);
+      applyDiscount(discount);
+      return;
+    }
+
+    setPendingDiscount(discount);
+    setManagerUsername("");
+    setManagerPassword("");
+    setAuthError("");
+    setIsManagerAuthModalOpen(true);
+  };
+
+  const handleManagerAuth = async () => {
+    setAuthError("");
+    setIsAuthLoading(true);
+
+    try {
+      const response = await apiRequest("POST", "/api/auth/login", {
+        username: managerUsername,
+        password: managerPassword
+      });
+
+      const data = await response.json();
+
+      if (data.role === "admin" || data.role === "manager") {
+        setManagerAuthGranted(true);
+        setIsManagerAuthModalOpen(false);
+        applyDiscount(pendingDiscount);
+      } else {
+        setAuthError("This account does not have permission to apply discounts");
+      }
+    } catch (error) {
+      setAuthError("Invalid credentials or server error");
+      console.error("Auth error:", error);
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
   const applyDiscount = (discount: Discount | null) => {
     setSelectedDiscount(discount);
     if (discount) {
-      // Use safe calculation to handle potential errors
       const discountAmount = safeCalculation(() => {
         if (!discount.value || cart.subtotal <= 0) return 0;
 
-        // Check for senior citizen discount special case
         if (discount.name.toLowerCase().includes('senior citizen') || discount.name.toLowerCase().includes('senior')) {
-          // Standard senior citizen discount is typically 20% (may vary by region)
-          const seniorDiscountRate = 0.20; // 20%
+          const seniorDiscountRate = 0.20;
           return cart.subtotal * seniorDiscountRate;
         }
 
-        // Regular discount calculation with null safety
         return discount.type === 'percent'
           ? (cart.subtotal * safeNumber(discount.value, 0)) / 100
           : safeNumber(discount.value, 0);
       }, 0);
 
-      // Update cart context with new discount (ensure we have a valid number)
       updateCart({
         ...cart,
         discount: Number(discountAmount.toFixed(2)) || 0
       });
     } else {
-      // Remove discount
       updateCart({ ...cart, discount: 0 });
     }
   };
 
-  // Handle successful payment completion
   const handlePaymentComplete = (orderId: number) => {
     setIsPaymentModalOpen(false);
     setCompletedOrderId(orderId);
     setIsReceiptModalOpen(true);
   };
 
-  // Start a new order after receipt
   const handleStartNewOrder = () => {
     setIsReceiptModalOpen(false);
     setCompletedOrderId(null);
   };
 
-  // Handle click outside for customer dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (customerSearchRef.current && !customerSearchRef.current.contains(event.target as Node)) {
@@ -147,7 +284,6 @@ export default function CartSection() {
     };
   }, []);
 
-  // Filter customers when search query changes
   useEffect(() => {
     if (customers && searchQuery) {
       const filtered = customers.filter(customer =>
@@ -161,7 +297,6 @@ export default function CartSection() {
     }
   }, [searchQuery, customers]);
 
-  // Select customer and update cart
   const selectCustomer = (customer: Customer | null) => {
     setSelectedCustomer(customer);
     updateCart({
@@ -173,22 +308,36 @@ export default function CartSection() {
   };
 
   useEffect(() => {
-    // Logic to fetch cart-related data when the component mounts
-  }, []);
+    if (!cart.items.length) {
+      setManagerAuthGranted(false);
+    }
+  }, [cart.items]);
 
   return (
     <>
       <div className="md:w-1/3 flex flex-col bg-white border-l border-gray-200 h-full">
-        {/* Cart Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold">Current Order</h2>
-            <button
-              className="text-sm text-red-500 hover:text-red-600 font-medium"
-              onClick={clearCart}
-            >
-              Clear All
-            </button>
+            <div className="flex items-center gap-2">
+              {heldOrders.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsHeldOrdersListOpen(true)}
+                  className="text-amber-600 border-amber-600 hover:bg-amber-50"
+                >
+                  <Clock className="h-4 w-4 mr-1" />
+                  <span>{heldOrders.length}</span>
+                </Button>
+              )}
+              <button
+                className="text-sm text-red-500 hover:text-red-600 font-medium"
+                onClick={clearCart}
+              >
+                Clear All
+              </button>
+            </div>
           </div>
           <div className="mt-2 relative" ref={customerSearchRef}>
             <div className="flex items-center p-2 bg-gray-50 rounded-lg">
@@ -233,7 +382,6 @@ export default function CartSection() {
               )}
             </div>
 
-            {/* Customer Suggestions Dropdown */}
             {showCustomerSuggestions && (searchQuery || !selectedCustomer) && (
               <div className="absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg max-h-60 overflow-auto border border-gray-200">
                 <div
@@ -290,7 +438,6 @@ export default function CartSection() {
           </div>
         </div>
 
-        {/* Cart Items */}
         <div className="flex-1 overflow-y-auto p-4">
           {cart.items.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center p-4">
@@ -306,10 +453,25 @@ export default function CartSection() {
                 <div className="flex-1">
                   <div className="flex justify-between">
                     <h4 className="font-medium text-base line-clamp-2">{item.name}</h4>
-                    <p className="font-semibold ml-2">{format(item.totalPrice)}</p>
+                    <div className="flex items-center">
+                      <p className="font-semibold ml-2">{formatCurrency(item.totalPrice)}</p>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="ml-1 p-1 text-gray-500 rounded-full hover:bg-gray-100">
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleVoidItem(item.productId)} className="text-red-600">
+                            <Ban className="mr-2 h-4 w-4" />
+                            <span>Void Item</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                   <div className="flex items-center mt-1">
-                    <span className="text-sm text-gray-500">{format(item.price)} x {item.quantity}</span>
+                    <span className="text-sm text-gray-500">{formatCurrency(item.price)} x {item.quantity}</span>
                   </div>
                   <div className="flex items-center mt-2">
                     <button
@@ -347,14 +509,12 @@ export default function CartSection() {
           )}
         </div>
 
-        {/* Cart Totals */}
         <div className="border-t border-gray-200 p-4">
           <div className="flex justify-between py-1">
             <span className="text-gray-600">Subtotal</span>
-            <span className="font-medium">{format(cart.subtotal)}</span>
+            <span className="font-medium">{formatCurrency(cart.subtotal)}</span>
           </div>
 
-          {/* Add Discount Selection */}
           <div className="flex justify-between py-1 items-center">
             <span className="text-gray-600">Discount</span>
             <div className="flex items-center gap-2">
@@ -364,8 +524,9 @@ export default function CartSection() {
                 onChange={(e) => {
                   const discountId = safeNumber(e.target.value);
                   const discount = discounts?.find(d => d.id === discountId) || null;
-                  applyDiscount(discount);
+                  requestDiscountAuth(discount);
                 }}
+                disabled={!managerAuthGranted && selectedDiscount !== null}
               >
                 <option value="">None</option>
                 {discounts?.map(discount => (
@@ -373,30 +534,39 @@ export default function CartSection() {
                     {discount.name || 'Unnamed Discount'} (
                     {discount.type === 'percent'
                       ? `${safeNumber(discount.value, 0)}%`
-                      : format(safeNumber(discount.value, 0))
+                      : formatCurrency(safeNumber(discount.value, 0))
                     })
                   </option>
                 )) || []}
               </select>
-              <span className="font-medium text-red-500">-{format(safeNumber(cart.discount, 0))}</span>
+              <span className="font-medium text-red-500">-{formatCurrency(safeNumber(cart.discount, 0))}</span>
             </div>
           </div>
           <div className="flex justify-between py-1">
             <span className="text-gray-600">Vat ({defaultTaxRate}%)</span>
-            <span className="font-medium">{format(cart.tax)}</span>
+            <span className="font-medium">{formatCurrency(cart.tax)}</span>
           </div>
           <div className="flex justify-between py-2 text-lg font-bold">
             <span>Total</span>
-            <span className="text-primary">{format(cart.total)}</span>
+            <span className="text-primary">{formatCurrency(cart.total)}</span>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-3 gap-2">
             <Button
               variant="outline"
-              className="border-primary text-primary hover:bg-blue-50"
+              className="border-amber-500 text-amber-500 hover:bg-amber-50"
               disabled={cart.items.length === 0}
+              onClick={handleHoldOrder}
             >
               Hold Order
+            </Button>
+            <Button
+              variant="outline"
+              className="border-red-500 text-red-500 hover:bg-red-50"
+              disabled={cart.items.length === 0}
+              onClick={handleVoidOrder}
+            >
+              Void Order
             </Button>
             <Button
               className="bg-primary text-white hover:bg-blue-600"
@@ -409,7 +579,6 @@ export default function CartSection() {
         </div>
       </div>
 
-      {/* Payment Modal */}
       <PaymentModal
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}
@@ -418,7 +587,6 @@ export default function CartSection() {
         customerName={selectedCustomer ? selectedCustomer.customerName : "Walk-in Customer"}
       />
 
-      {/* Receipt Modal */}
       <ReceiptModal
         isOpen={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}
@@ -427,7 +595,6 @@ export default function CartSection() {
         cart={cart}
       />
 
-      {/* Customer Modal */}
       <Dialog open={isCustomerModalOpen} onOpenChange={setIsCustomerModalOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -529,7 +696,7 @@ export default function CartSection() {
                           <span className="mr-3">Visits: {customer.totalVisits}</span>
                         )}
                         {safeNumber(customer.totalSpent) > 0 && (
-                          <span>Total: {format(safeNumber(customer.totalSpent))}</span>
+                          <span>Total: {formatCurrency(safeNumber(customer.totalSpent))}</span>
                         )}
                       </div>
                     )}
@@ -574,6 +741,210 @@ export default function CartSection() {
               }}
             >
               Manage Customers
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isManagerAuthModalOpen} onOpenChange={(open) => {
+        if (!open) {
+          setPendingDiscount(null);
+        }
+        setIsManagerAuthModalOpen(open);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manager Authorization Required</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 space-y-4">
+            <p className="text-sm text-gray-600">
+              Manager credentials are required to apply discounts.
+            </p>
+            {authError && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
+                {authError}
+              </div>
+            )}
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium">Username</label>
+                <Input
+                  value={managerUsername}
+                  onChange={(e) => setManagerUsername(e.target.value)}
+                  placeholder="Manager username"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Password</label>
+                <Input
+                  type="password"
+                  value={managerPassword}
+                  onChange={(e) => setManagerPassword(e.target.value)}
+                  placeholder="Manager password"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsManagerAuthModalOpen(false);
+                setPendingDiscount(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleManagerAuth}
+              disabled={!managerUsername || !managerPassword || isAuthLoading}
+            >
+              {isAuthLoading ? "Verifying..." : "Authorize"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Hold Order Dialog */}
+      <Dialog open={isHoldOrderModalOpen} onOpenChange={setIsHoldOrderModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hold Current Order</DialogTitle>
+            <DialogDescription>
+              This order will be saved and can be retrieved later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium">Order Name (Optional)</label>
+              <Input
+                value={holdOrderName}
+                onChange={(e) => setHoldOrderName(e.target.value)}
+                placeholder="e.g., Table 5, John's Order"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Leave blank to auto-generate a name
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={() => setIsHoldOrderModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={saveHeldOrder}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              Hold Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Void Item Confirmation Dialog */}
+      <AlertDialog open={isVoidItemDialogOpen} onOpenChange={setIsVoidItemDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Void Item</AlertDialogTitle>
+            <AlertDialogDescription>
+              {voidItemId !== null && (
+                <>
+                  You are about to void {cart.items.find(i => i.productId === voidItemId)?.name || "this item"}.
+                  This action will be logged for audit purposes.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmVoidItem} className="bg-red-600 hover:bg-red-700">
+              Void Item
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Void Order Confirmation Dialog */}
+      <AlertDialog open={isVoidOrderDialogOpen} onOpenChange={setIsVoidOrderDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Void Order</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to void the entire order with {cart.items.length} item(s).
+              This action will be logged for audit purposes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmVoidOrder} className="bg-red-600 hover:bg-red-700">
+              Void Order
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Held Orders List Dialog */}
+      <Dialog open={isHeldOrdersListOpen} onOpenChange={setIsHeldOrdersListOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Held Orders</DialogTitle>
+            <DialogDescription>
+              Select an order to retrieve or manage
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[350px] overflow-y-auto">
+            {heldOrders.length > 0 ? (
+              <div className="space-y-2">
+                {heldOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="p-3 border rounded-md hover:bg-gray-50 cursor-pointer flex justify-between items-center"
+                    onClick={() => handleRetrieveHeldOrder(order.id)}
+                  >
+                    <div>
+                      <div className="font-medium">{order.name}</div>
+                      <div className="text-xs text-gray-500 flex items-center">
+                        <Clock className="h-3 w-3 mr-1" />
+                        {format(new Date(order.timestamp), "MMM d, h:mm a")}
+                      </div>
+                      <div className="text-xs mt-1">
+                        {order.cart.items.length} items - {formatCurrency(order.cart.total)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-500 border-red-500 hover:bg-red-50"
+                        onClick={(e) => handleDeleteHeldOrder(order.id, e)}
+                      >
+                        Delete
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-amber-500 hover:bg-amber-600 text-white"
+                      >
+                        Retrieve
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8">
+                <AlertCircle className="h-12 w-12 text-gray-300 mb-2" />
+                <p className="text-gray-500">No held orders</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => setIsHeldOrdersListOpen(false)}
+            >
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -205,14 +205,46 @@ export default function InventoryPage() {
   // Add product mutation
   const addProductMutation = useMutation({
     mutationFn: async (product: InsertProduct) => {
-      const response = await apiRequest("POST", "/api/products", product);
+      // Format the request body with the product in a nested object as expected by the API
+      const requestBody = {
+        product,
+        variants: [],
+        stores: [],
+        modifiers: []
+      };
+
+      const response = await apiRequest("POST", "/api/products", requestBody);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async (newProduct) => {
+      // Apply modifiers to the created product
+      if (productModifiers.length > 0) {
+        try {
+          await Promise.all(productModifiers.map(modifier =>
+            apiRequest("POST", `/api/products/${newProduct.id}/modifiers`, {
+              modifierId: modifier.modifierId
+            })
+          ));
+
+          toast({
+            title: "Modifiers Added",
+            description: `${productModifiers.length} modifiers have been linked to the product`,
+          });
+        } catch (error) {
+          console.error("Error adding modifiers:", error);
+          toast({
+            title: "Warning",
+            description: "Product was created, but there was an issue adding modifiers",
+            variant: "warning"
+          });
+        }
+      }
+
       // Instead of invalidating the query, we refetch the data
       refetchProducts();
       setIsAddProductDialogOpen(false);
       resetProductForm();
+      setProductModifiers([]);
       toast({
         title: "Product Added",
         description: "The product has been added successfully",
@@ -602,6 +634,28 @@ export default function InventoryPage() {
     });
   };
 
+  // Load modifiers when opening the Add New Item dialog
+  useEffect(() => {
+    if (isAddProductDialogOpen && !availableModifiers.length && !isLoadingModifiers) {
+      // Fetch modifiers for the "Add New Item" dialog
+      const fetchModifiers = async () => {
+        try {
+          const response = await apiRequest("GET", "/api/modifiers");
+          const data = await response.json();
+          setAvailableModifiers(data || []);
+        } catch (error) {
+          toast({
+            title: "Failed to load modifiers",
+            description: "Could not load available modifiers",
+            variant: "destructive"
+          });
+        }
+      };
+
+      fetchModifiers();
+    }
+  }, [isAddProductDialogOpen, availableModifiers.length, isLoadingModifiers, toast]);
+
   // Handle product form submission
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -626,7 +680,7 @@ export default function InventoryPage() {
       stockQuantity: Number(newProduct.stockQuantity)
     };
 
-    // Submit form
+    // Submit form with properly formatted data object
     addProductMutation.mutate(productToSubmit as InsertProduct);
   };
 
@@ -788,17 +842,22 @@ export default function InventoryPage() {
       // First get product modifiers
       const productResponse = await apiRequest("GET", `/api/products/${product.id}`);
       const productData = await productResponse.json();
-      setProductModifiers(productData.modifiers || []);
 
       // Then get all available modifiers
-      if (!modifiers) {
-        const modifiersResponse = await apiRequest("GET", "/api/modifiers");
-        const modifiersData = await modifiersResponse.json();
-        setAvailableModifiers(modifiersData || []);
-      } else {
-        setAvailableModifiers(modifiers);
-      }
+      const modifiersResponse = await apiRequest("GET", "/api/modifiers");
+      const modifiersData = await modifiersResponse.json();
+      setAvailableModifiers(modifiersData || []);
 
+      // Now enhance the product modifiers with names from the modifiers list
+      const enhancedModifiers = (productData.modifiers || []).map((modifier: { id: number; modifierId: number }) => {
+        const matchingModifier = modifiersData.find((m: { id: number; name: string }) => m.id === modifier.modifierId);
+        return {
+          ...modifier,
+          name: matchingModifier ? matchingModifier.name : `Modifier #${modifier.modifierId}`
+        };
+      });
+
+      setProductModifiers(enhancedModifiers);
       setIsModifiersDialogOpen(true);
     } catch (error) {
       toast({
@@ -1455,118 +1514,515 @@ export default function InventoryPage() {
       <PermissionGuard requiredPermission="canManageProducts">
         {/* Add Product Dialog */}
         <Dialog open={isAddProductDialogOpen} onOpenChange={setIsAddProductDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Add New Item</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleAddProduct}>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name*</Label>
-                    <Input
-                      id="name"
-                      name="name"
-                      value={newProduct.name}
-                      onChange={handleProductChange}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="price">Price*</Label>
-                    <Input
-                      id="price"
-                      name="price"
-                      type="text"
-                      value={format(Number(newProduct.price))}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/[^0-9.]/g, '');
-                        setNewProduct(prev => ({
-                          ...prev,
-                          price: parse(value)
-                        }));
-                      }}
-                      required
-                    />
-                  </div>
-                </div>
+              <Tabs defaultValue="basics" className="mt-2">
+                <TabsList className="grid grid-cols-5 mb-4">
+                  <TabsTrigger value="basics">Basics</TabsTrigger>
+                  <TabsTrigger value="variants">Variants</TabsTrigger>
+                  <TabsTrigger value="stores">Availability</TabsTrigger>
+                  <TabsTrigger value="modifiers">Modifiers</TabsTrigger>
+                  <TabsTrigger value="allergens">Allergens</TabsTrigger>
+                </TabsList>
 
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    value={newProduct.description ?? ""}
-                    onChange={handleProductChange}
-                    rows={3}
-                  />
-                </div>
+                <TabsContent value="basics">
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Name*</Label>
+                        <Input
+                          id="name"
+                          name="name"
+                          value={newProduct.name}
+                          onChange={handleProductChange}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="price">Price*</Label>
+                        <Input
+                          id="price"
+                          name="price"
+                          type="text"
+                          value={format(Number(newProduct.price))}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/[^0-9.]/g, '');
+                            setNewProduct(prev => ({
+                              ...prev,
+                              price: parse(value)
+                            }));
+                          }}
+                          required
+                        />
+                      </div>
+                    </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="categoryId">Category</Label>
-                    <Select
-                      name="categoryId"
-                      value={newProduct.categoryId?.toString() || ""}
-                      onValueChange={(value) => setNewProduct(prev => ({ ...prev, categoryId: parseInt(value) }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories && categories.map((category: Category) => (
-                          <SelectItem key={category.id} value={category.id.toString()}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sku">SKU</Label>
-                    <Input
-                      id="sku"
-                      name="sku"
-                      value={newProduct.sku ?? ""}
-                      onChange={handleProductChange}
-                    />
-                  </div>
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="description">Description</Label>
+                      <Textarea
+                        id="description"
+                        name="description"
+                        value={newProduct.description ?? ""}
+                        onChange={handleProductChange}
+                        rows={3}
+                      />
+                    </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="imageUrl">Image URL</Label>
-                    <Input
-                      id="imageUrl"
-                      name="imageUrl"
-                      value={newProduct.imageUrl ?? ""}
-                      onChange={handleProductChange}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="stockQuantity">Stock Quantity</Label>
-                    <Input
-                      id="stockQuantity"
-                      name="stockQuantity"
-                      type="number"
-                      value={newProduct.stockQuantity}
-                      onChange={handleProductChange}
-                    />
-                  </div>
-                </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="categoryId">Category</Label>
+                        <Select
+                          name="categoryId"
+                          value={newProduct.categoryId?.toString() || ""}
+                          onValueChange={(value) => setNewProduct(prev => ({ ...prev, categoryId: parseInt(value) }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories && categories.map((category: Category) => (
+                              <SelectItem key={category.id} value={category.id.toString()}>
+                                {category.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="sku">SKU</Label>
+                        <Input
+                          id="sku"
+                          name="sku"
+                          value={newProduct.sku ?? ""}
+                          onChange={handleProductChange}
+                        />
+                      </div>
+                    </div>
 
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="inStock"
-                    checked={newProduct.inStock}
-                    onCheckedChange={handleStockStatusChange}
-                  />
-                  <Label htmlFor="inStock">In Stock</Label>
-                </div>
-              </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="imageUrl">Image URL</Label>
+                        <Input
+                          id="imageUrl"
+                          name="imageUrl"
+                          value={newProduct.imageUrl ?? ""}
+                          onChange={handleProductChange}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="stockQuantity">Stock Quantity</Label>
+                        <Input
+                          id="stockQuantity"
+                          name="stockQuantity"
+                          type="number"
+                          value={newProduct.stockQuantity}
+                          onChange={handleProductChange}
+                        />
+                      </div>
+                    </div>
 
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsAddProductDialogOpen(false)}>
+                    <div className="flex items-center gap-8">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="inStock"
+                          checked={newProduct.inStock}
+                          onCheckedChange={handleStockStatusChange}
+                        />
+                        <Label htmlFor="inStock">In Stock</Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="isTaxable"
+                          checked={newProduct.isTaxable !== false}
+                          onCheckedChange={(checked) =>
+                            setNewProduct(prev => ({ ...prev, isTaxable: checked }))
+                          }
+                        />
+                        <Label htmlFor="isTaxable">Taxable</Label>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="variants">
+                  <div className="grid gap-4 py-4">
+                    <div className="border rounded-md p-4">
+                      <h3 className="font-medium mb-3">Add Variant</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="optionName">Option Name</Label>
+                          <Input
+                            id="optionName"
+                            name="optionName"
+                            value={newVariant.optionName}
+                            onChange={handleVariantChange}
+                            placeholder="e.g. Size, Color, Material"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="optionValue">Option Value</Label>
+                          <Input
+                            id="optionValue"
+                            name="optionValue"
+                            value={newVariant.optionValue}
+                            onChange={handleVariantChange}
+                            placeholder="e.g. Large, Red, Cotton"
+                          />
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          if (!newVariant.optionName || !newVariant.optionValue) {
+                            toast({
+                              title: "Validation Error",
+                              description: "Option name and value are required",
+                              variant: "destructive"
+                            });
+                            return;
+                          }
+
+                          // Add to temporary list of variants to be created after product
+                          setProductVariants([...productVariants, {
+                            id: Date.now(), // Temporary ID
+                            optionName: newVariant.optionName,
+                            optionValue: newVariant.optionValue
+                          }]);
+
+                          // Reset the form
+                          setNewVariant({
+                            optionName: "",
+                            optionValue: "",
+                            price: "",
+                            cost: "",
+                            sku: "",
+                            barcode: "",
+                            stockQuantity: 0
+                          });
+                        }}
+                        className="mt-4"
+                      >
+                        Add Variant
+                      </Button>
+                    </div>
+
+                    <div className="border rounded-md">
+                      <h3 className="font-medium p-4 border-b">Pending Variants</h3>
+                      {productVariants.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500">
+                          No variants added yet. Variants will be created after saving the product.
+                        </div>
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Option Name</TableHead>
+                              <TableHead>Option Value</TableHead>
+                              <TableHead>Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {productVariants.map((variant) => (
+                              <TableRow key={variant.id}>
+                                <TableCell>
+                                  <span className="font-medium">{variant.optionName}</span>
+                                </TableCell>
+                                <TableCell>{variant.optionValue}</TableCell>
+                                <TableCell>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-red-600"
+                                    onClick={() => {
+                                      setProductVariants(productVariants.filter(v => v.id !== variant.id));
+                                    }}
+                                  >
+                                    <Trash className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="stores">
+                  <div className="grid gap-4 py-4">
+                    <div className="border rounded-md overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Store</TableHead>
+                            <TableHead>Available</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {stores && stores.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={2} className="text-center py-4">
+                                No stores configured.
+                              </TableCell>
+                            </TableRow>
+                          ) : !stores ? (
+                            <TableRow>
+                              <TableCell colSpan={2} className="text-center py-4">
+                                Loading stores...
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            stores.map((store: StoreSettings) => {
+                              // Check if we already have a setting for this store
+                              const storeIndex = productStores.findIndex(s => s.storeId === store.id);
+                              const isAvailable = storeIndex >= 0 ? productStores[storeIndex].isAvailable : true;
+
+                              return (
+                                <TableRow key={store.id}>
+                                  <TableCell>
+                                    {store.name} {store.branch ? `- ${store.branch}` : ''}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Switch
+                                      checked={isAvailable}
+                                      onCheckedChange={(checked) => {
+                                        if (storeIndex >= 0) {
+                                          const newStores = [...productStores];
+                                          newStores[storeIndex].isAvailable = checked;
+                                          setProductStores(newStores);
+                                        } else {
+                                          setProductStores([
+                                            ...productStores,
+                                            { storeId: store.id, isAvailable: checked }
+                                          ]);
+                                        }
+                                      }}
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Store availability settings will be applied after creating the product.
+                    </p>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="modifiers">
+                  <div className="grid gap-4 py-4">
+                    <div className="border rounded-md p-4">
+                      <h3 className="font-medium mb-3">Available Modifiers</h3>
+
+                      {isLoadingModifiers ? (
+                        <div className="text-center py-4">Loading modifiers...</div>
+                      ) : !availableModifiers || availableModifiers.length === 0 ? (
+                        <div className="text-center py-4">
+                          No modifiers available. Create modifiers first.
+                          <div className="mt-2">
+                            <Button variant="link" asChild>
+                              <a href="/items-modifiers">Create Modifiers</a>
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                          {availableModifiers.map(modifier => {
+                            // Check if this modifier is already selected
+                            const isSelected = productModifiers.some(pm => pm.modifierId === modifier.id);
+
+                            return (
+                              <div key={modifier.id} className="flex items-center justify-between p-2 border rounded">
+                                <span>{modifier.name}</span>
+                                <Button
+                                  variant={isSelected ? "destructive" : "default"}
+                                  size="sm"
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      // Remove the modifier
+                                      setProductModifiers(prev =>
+                                        prev.filter(pm => pm.modifierId !== modifier.id)
+                                      );
+                                    } else {
+                                      // Add the modifier
+                                      setProductModifiers(prev => [
+                                        ...prev,
+                                        {
+                                          id: Date.now(), // Temporary ID
+                                          modifierId: modifier.id,
+                                          name: modifier.name
+                                        }
+                                      ]);
+                                    }
+                                  }}
+                                >
+                                  {isSelected ? "Remove" : "Add"}
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border rounded-md">
+                      <h3 className="font-medium p-4 border-b">Selected Modifiers</h3>
+                      {productModifiers.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500">
+                          No modifiers selected. Modifiers will be linked after saving the product.
+                        </div>
+                      ) : (
+                        <ul className="divide-y max-h-60 overflow-y-auto">
+                          {productModifiers.map(modifier => (
+                            <li key={modifier.id} className="flex items-center justify-between p-4">
+                              <span className="font-medium">
+                                {modifier.name || `Modifier #${modifier.modifierId}`}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-red-600"
+                                onClick={() => {
+                                  setProductModifiers(prev =>
+                                    prev.filter(m => m.id !== modifier.id)
+                                  );
+                                }}
+                              >
+                                <Trash className="h-4 w-4" />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="allergens">
+                  <div className="grid gap-4 py-4">
+                    <div className="border rounded-md p-4">
+                      <h3 className="font-medium mb-3">Add Allergen</h3>
+                      <div className="flex gap-2 items-end">
+                        <div className="flex-1">
+                          <Label htmlFor="allergenSelect" className="mb-2">Select Allergen</Label>
+                          <Select
+                            value={selectedAllergenId?.toString() || ""}
+                            onValueChange={handleAllergenSelect}
+                          >
+                            <SelectTrigger id="allergenSelect">
+                              <SelectValue placeholder="Select an allergen" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {isLoadingAllergens ? (
+                                <SelectItem value="loading" disabled>Loading allergens...</SelectItem>
+                              ) : !allergensList || allergensList.length === 0 ? (
+                                <SelectItem value="none" disabled>No allergens found</SelectItem>
+                              ) : (
+                                allergensList.map((allergen: { id: number; name: string; severity?: string }) => (
+                                  <SelectItem
+                                    key={allergen.id}
+                                    value={allergen.id.toString()}
+                                  >
+                                    {allergen.name}
+                                    {allergen.severity && (
+                                      <span className={`ml-2 text-xs ${
+                                        allergen.severity === 'severe' ? 'text-destructive' :
+                                        allergen.severity === 'moderate' ? 'text-amber-500' :
+                                        'text-green-500'
+                                      }`}>
+                                        ({allergen.severity})
+                                      </span>
+                                    )}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="w-32">
+                          <Label htmlFor="allergenseverity" className="mb-2">Severity</Label>
+                          <Select
+                            value={selectedSeverity}
+                            onValueChange={(value) => setSelectedSeverity(value as "mild" | "moderate" | "severe")}
+                          >
+                            <SelectTrigger id="allergenseverity">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="mild">Mild</SelectItem>
+                              <SelectItem value="moderate">Moderate</SelectItem>
+                              <SelectItem value="severe">Severe</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={handleAddSelectedAllergen}
+                          className="mb-[1px]"
+                          disabled={!selectedAllergenId}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="border rounded-md">
+                      <h3 className="font-medium p-4 border-b">Selected Allergens</h3>
+                      {productAllergens.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500">
+                          No allergens added. Allergens will be linked after saving the product.
+                        </div>
+                      ) : (
+                        <ul className="divide-y max-h-60 overflow-y-auto">
+                          {productAllergens.map((allergen, index) => (
+                            <li key={index} className="flex items-center justify-between p-4">
+                              <div>
+                                <span className="font-medium">{allergen.name}</span>
+                                <Badge variant={
+                                  allergen.severity === 'mild'
+                                    ? "outline"
+                                    : allergen.severity === 'moderate'
+                                      ? "secondary"
+                                      : "destructive"
+                                } className="ml-2">
+                                  {allergen.severity}
+                                </Badge>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-red-600"
+                                onClick={() => handleRemoveAllergen(index)}
+                              >
+                                <Trash className="h-4 w-4" />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <DialogFooter className="mt-4">
+                <Button type="button" variant="outline" onClick={() => {
+                  setIsAddProductDialogOpen(false);
+                  resetProductForm();
+                  setProductVariants([]);
+                  setProductStores([]);
+                  setProductModifiers([]);
+                  setProductAllergens([]);
+                }}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={addProductMutation.isPending}>
@@ -1584,172 +2040,516 @@ export default function InventoryPage() {
               <DialogTitle>Edit Item Details</DialogTitle>
             </DialogHeader>
             <form onSubmit={updateProduct}>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-name">Name*</Label>
-                    <Input
-                      id="edit-name"
-                      name="name"
-                      value={newProduct.name}
-                      onChange={handleProductChange}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-price">Price*</Label>
-                    <Input
-                      id="edit-price"
-                      name="price"
-                      type="text"
-                      value={format(Number(newProduct.price))}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/[^0-9.]/g, '');
-                        setNewProduct(prev => ({
-                          ...prev,
-                          price: value
-                        }));
-                      }}
-                      required
-                    />
-                  </div>
-                </div>
+              <Tabs defaultValue="basics" className="mt-2">
+                <TabsList className="grid grid-cols-5 mb-4">
+                  <TabsTrigger value="basics">Basics</TabsTrigger>
+                  <TabsTrigger value="variants">Variants</TabsTrigger>
+                  <TabsTrigger value="stores">Availability</TabsTrigger>
+                  <TabsTrigger value="modifiers">Modifiers</TabsTrigger>
+                  <TabsTrigger value="allergens">Allergens</TabsTrigger>
+                </TabsList>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-cost">Cost</Label>
-                    <Input
-                      id="edit-cost"
-                      name="cost"
-                      type="text"
-                      value={format(Number(newProduct.cost || 0))}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/[^0-9.]/g, '');
-                        setNewProduct(prev => ({
-                          ...prev,
-                          cost: value
-                        }));
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-barcode">Barcode</Label>
-                    <Input
-                      id="edit-barcode"
-                      name="barcode"
-                      value={newProduct.barcode || ""}
-                      onChange={handleProductChange}
-                    />
-                  </div>
-                </div>
+                <TabsContent value="basics">
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-name">Name*</Label>
+                        <Input
+                          id="edit-name"
+                          name="name"
+                          value={newProduct.name}
+                          onChange={handleProductChange}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-price">Price*</Label>
+                        <Input
+                          id="edit-price"
+                          name="price"
+                          type="text"
+                          value={format(Number(newProduct.price))}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/[^0-9.]/g, '');
+                            setNewProduct(prev => ({
+                              ...prev,
+                              price: value
+                            }));
+                          }}
+                          required
+                        />
+                      </div>
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="edit-description">Description</Label>
-                  <Textarea
-                    id="edit-description"
-                    name="description"
-                    value={newProduct.description || ""}
-                    onChange={handleProductChange}
-                    rows={3}
-                  />
-                </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-cost">Cost</Label>
+                        <Input
+                          id="edit-cost"
+                          name="cost"
+                          type="text"
+                          value={format(Number(newProduct.cost || 0))}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/[^0-9.]/g, '');
+                            setNewProduct(prev => ({
+                              ...prev,
+                              cost: value
+                            }));
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-barcode">Barcode</Label>
+                        <Input
+                          id="edit-barcode"
+                          name="barcode"
+                          value={newProduct.barcode || ""}
+                          onChange={handleProductChange}
+                        />
+                      </div>
+                    </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-categoryId">Category</Label>
-                    <Select
-                      name="categoryId"
-                      value={newProduct.categoryId?.toString() || ""}
-                      onValueChange={(value) => setNewProduct(prev => ({ ...prev, categoryId: parseInt(value) }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories && categories.map((category: Category) => (
-                          <SelectItem key={category.id} value={category.id.toString()}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-sku">SKU</Label>
-                    <Input
-                      id="edit-sku"
-                      name="sku"
-                      value={newProduct.sku || ""}
-                      onChange={handleProductChange}
-                    />
-                  </div>
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-description">Description</Label>
+                      <Textarea
+                        id="edit-description"
+                        name="description"
+                        value={newProduct.description || ""}
+                        onChange={handleProductChange}
+                        rows={3}
+                      />
+                    </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-imageUrl">Image URL</Label>
-                    <Input
-                      id="edit-imageUrl"
-                      name="imageUrl"
-                      value={newProduct.imageUrl || ""}
-                      onChange={handleProductChange}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-stockQuantity">Stock Quantity</Label>
-                    <Input
-                      id="edit-stockQuantity"
-                      name="stockQuantity"
-                      type="number"
-                      value={newProduct.stockQuantity}
-                      onChange={handleProductChange}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-soldBy">Sold By</Label>
-                    <Select
-                      name="soldBy"
-                      value={newProduct.soldBy || "each"}
-                      onValueChange={(value) => setNewProduct(prev => ({ ...prev, soldBy: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sold by" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="each">Each</SelectItem>
-                        <SelectItem value="weight">Weight</SelectItem>
-                        <SelectItem value="volume">Volume</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-categoryId">Category</Label>
+                        <Select
+                          name="categoryId"
+                          value={newProduct.categoryId?.toString() || ""}
+                          onValueChange={(value) => setNewProduct(prev => ({ ...prev, categoryId: parseInt(value) }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories && categories.map((category: Category) => (
+                              <SelectItem key={category.id} value={category.id.toString()}>
+                                {category.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-sku">SKU</Label>
+                        <Input
+                          id="edit-sku"
+                          name="sku"
+                          value={newProduct.sku || ""}
+                          onChange={handleProductChange}
+                        />
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-8">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="edit-inStock"
-                      checked={newProduct.inStock}
-                      onCheckedChange={(checked) =>
-                        setNewProduct(prev => ({ ...prev, inStock: checked }))
-                      }
-                    />
-                    <Label htmlFor="edit-inStock">In Stock</Label>
-                  </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-imageUrl">Image URL</Label>
+                        <Input
+                          id="edit-imageUrl"
+                          name="imageUrl"
+                          value={newProduct.imageUrl || ""}
+                          onChange={handleProductChange}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-stockQuantity">Stock Quantity</Label>
+                        <Input
+                          id="edit-stockQuantity"
+                          name="stockQuantity"
+                          type="number"
+                          value={newProduct.stockQuantity}
+                          onChange={handleProductChange}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-soldBy">Sold By</Label>
+                        <Select
+                          name="soldBy"
+                          value={newProduct.soldBy || "each"}
+                          onValueChange={(value) => setNewProduct(prev => ({ ...prev, soldBy: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Sold by" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="each">Each</SelectItem>
+                            <SelectItem value="weight">Weight</SelectItem>
+                            <SelectItem value="volume">Volume</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
 
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="edit-isTaxable"
-                      checked={newProduct.isTaxable !== false}
-                      onCheckedChange={(checked) =>
-                        setNewProduct(prev => ({ ...prev, isTaxable: checked }))
-                      }
-                    />
-                    <Label htmlFor="edit-isTaxable">Taxable</Label>
-                  </div>
-                </div>
-              </div>
+                    <div className="flex items-center gap-8">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="edit-inStock"
+                          checked={newProduct.inStock}
+                          onCheckedChange={(checked) =>
+                            setNewProduct(prev => ({ ...prev, inStock: checked }))
+                          }
+                        />
+                        <Label htmlFor="edit-inStock">In Stock</Label>
+                      </div>
 
-              <DialogFooter>
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="edit-isTaxable"
+                          checked={newProduct.isTaxable !== false}
+                          onCheckedChange={(checked) =>
+                            setNewProduct(prev => ({ ...prev, isTaxable: checked }))
+                          }
+                        />
+                        <Label htmlFor="edit-isTaxable">Taxable</Label>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="variants">
+                  <div className="grid gap-4 py-4">
+                    <div className="border rounded-md p-4">
+                      <h3 className="font-medium mb-3">Add New Variant</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-optionName">Option Name</Label>
+                          <Input
+                            id="edit-optionName"
+                            name="optionName"
+                            value={newVariant.optionName}
+                            onChange={handleVariantChange}
+                            placeholder="e.g. Size, Color, Material"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-optionValue">Option Value</Label>
+                          <Input
+                            id="edit-optionValue"
+                            name="optionValue"
+                            value={newVariant.optionValue}
+                            onChange={handleVariantChange}
+                            placeholder="e.g. Large, Red, Cotton"
+                          />
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={handleAddVariant}
+                        className="mt-4"
+                      >
+                        Add Variant
+                      </Button>
+                    </div>
+
+                    <div className="border rounded-md">
+                      <h3 className="font-medium p-4 border-b">Existing Variants</h3>
+                      <div className="max-h-96 overflow-y-auto">
+                        {productVariants.length === 0 ? (
+                          <div className="p-8 text-center text-gray-500">
+                            No variants added yet.
+                          </div>
+                        ) : (
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Option Name</TableHead>
+                                <TableHead>Option Value</TableHead>
+                                <TableHead>Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {productVariants.map((variant) => (
+                                <TableRow key={variant.id}>
+                                  <TableCell>
+                                    <span className="font-medium">{variant.optionName}</span>
+                                  </TableCell>
+                                  <TableCell>{variant.optionValue}</TableCell>
+                                  <TableCell>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 text-red-600"
+                                      onClick={() => handleDeleteVariant(variant.id)}
+                                    >
+                                      <Trash className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="stores">
+                  <div className="grid gap-4 py-4">
+                    <div className="border rounded-md overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Store</TableHead>
+                            <TableHead>Available</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {stores && stores.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={2} className="text-center py-4">
+                                No stores configured.
+                              </TableCell>
+                            </TableRow>
+                          ) : !stores ? (
+                            <TableRow>
+                              <TableCell colSpan={2} className="text-center py-4">
+                                Loading stores...
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            stores.map((store: StoreSettings) => {
+                              const storeLink = productStores.find(ps => ps.storeId === store.id);
+                              const isAvailable = storeLink ? storeLink.isAvailable : true;
+
+                              return (
+                                <TableRow key={store.id}>
+                                  <TableCell>
+                                    {store.name} {store.branch ? `- ${store.branch}` : ''}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Switch
+                                      checked={isAvailable}
+                                      onCheckedChange={() => handleToggleStoreAvailability(store.id, isAvailable)}
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="modifiers">
+                  <div className="grid gap-4 py-4">
+                    <div className="border rounded-md p-4">
+                      <h3 className="font-medium mb-3">Available Modifiers</h3>
+
+                      {isLoadingModifiers ? (
+                        <div className="text-center py-4">Loading modifiers...</div>
+                      ) : !availableModifiers || availableModifiers.length === 0 ? (
+                        <div className="text-center py-4">
+                          No modifiers available. Create modifiers first.
+                          <div className="mt-2">
+                            <Button variant="link" asChild>
+                              <a href="/items-modifiers">Create Modifiers</a>
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                          {availableModifiers.map(modifier => {
+                            // Check if this modifier is already selected
+                            const isSelected = productModifiers.some(pm => pm.modifierId === modifier.id);
+
+                            return (
+                              <div key={modifier.id} className="flex items-center justify-between p-2 border rounded">
+                                <span>{modifier.name}</span>
+                                <Button
+                                  variant={isSelected ? "destructive" : "default"}
+                                  size="sm"
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      // Remove the modifier
+                                      setProductModifiers(prev =>
+                                        prev.filter(pm => pm.modifierId !== modifier.id)
+                                      );
+                                    } else {
+                                      // Add the modifier
+                                      setProductModifiers(prev => [
+                                        ...prev,
+                                        {
+                                          id: Date.now(), // Temporary ID
+                                          modifierId: modifier.id,
+                                          name: modifier.name
+                                        }
+                                      ]);
+                                    }
+                                  }}
+                                >
+                                  {isSelected ? "Remove" : "Add"}
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border rounded-md">
+                      <h3 className="font-medium p-4 border-b">Selected Modifiers</h3>
+                      {productModifiers.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500">
+                          No modifiers selected. Modifiers will be linked after saving the product.
+                        </div>
+                      ) : (
+                        <ul className="divide-y max-h-60 overflow-y-auto">
+                          {productModifiers.map(modifier => (
+                            <li key={modifier.id} className="flex items-center justify-between p-4">
+                              <span className="font-medium">
+                                {modifier.name || `Modifier #${modifier.modifierId}`}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-red-600"
+                                onClick={() => {
+                                  setProductModifiers(prev =>
+                                    prev.filter(m => m.id !== modifier.id)
+                                  );
+                                }}
+                              >
+                                <Trash className="h-4 w-4" />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="allergens">
+                  <div className="grid gap-4 py-4">
+                    <div className="border rounded-md p-4">
+                      <h3 className="font-medium mb-3">Add Allergen</h3>
+                      <div className="flex gap-2 items-end">
+                        <div className="flex-1">
+                          <Label htmlFor="edit-allergenSelect" className="mb-2">Select Allergen</Label>
+                          <Select
+                            value={selectedAllergenId?.toString() || ""}
+                            onValueChange={handleAllergenSelect}
+                          >
+                            <SelectTrigger id="edit-allergenSelect">
+                              <SelectValue placeholder="Select an allergen" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {isLoadingAllergens ? (
+                                <SelectItem value="loading" disabled>Loading allergens...</SelectItem>
+                              ) : !allergensList || allergensList.length === 0 ? (
+                                <SelectItem value="none" disabled>No allergens found</SelectItem>
+                              ) : (
+                                allergensList.map((allergen: { id: number; name: string; severity?: string }) => (
+                                  <SelectItem
+                                    key={allergen.id}
+                                    value={allergen.id.toString()}
+                                  >
+                                    {allergen.name}
+                                    {allergen.severity && (
+                                      <span className={`ml-2 text-xs ${
+                                        allergen.severity === 'severe' ? 'text-destructive' :
+                                        allergen.severity === 'moderate' ? 'text-amber-500' :
+                                        'text-green-500'
+                                      }`}>
+                                        ({allergen.severity})
+                                      </span>
+                                    )}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="w-32">
+                          <Label htmlFor="edit-allergenseverity" className="mb-2">Severity</Label>
+                          <Select
+                            value={selectedSeverity}
+                            onValueChange={(value) => setSelectedSeverity(value as "mild" | "moderate" | "severe")}
+                          >
+                            <SelectTrigger id="edit-allergenseverity">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="mild">Mild</SelectItem>
+                              <SelectItem value="moderate">Moderate</SelectItem>
+                              <SelectItem value="severe">Severe</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={handleAddSelectedAllergen}
+                          className="mb-[1px]"
+                          disabled={!selectedAllergenId}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                      <div className="flex justify-end mt-2">
+                        <Button
+                          variant="link"
+                          className="text-xs"
+                          asChild
+                        >
+                          <a href="/items/allergens" target="_blank">Manage Master Allergen List</a>
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="border rounded-md">
+                      <h3 className="font-medium p-4 border-b">Current Allergens</h3>
+                      {productAllergens.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500">
+                          No allergens added to this product.
+                        </div>
+                      ) : (
+                        <ul className="divide-y max-h-60 overflow-y-auto">
+                          {productAllergens.map((allergen, index) => (
+                            <li key={index} className="flex items-center justify-between p-4">
+                              <div>
+                                <span className="font-medium">{allergen.name}</span>
+                                <Badge variant={
+                                  allergen.severity === 'mild'
+                                    ? "outline"
+                                    : allergen.severity === 'moderate'
+                                      ? "secondary"
+                                      : "destructive"
+                                } className="ml-2">
+                                  {allergen.severity}
+                                </Badge>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-red-600"
+                                onClick={() => handleRemoveAllergen(index)}
+                              >
+                                <Trash className="h-4 w-4" />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <DialogFooter className="mt-4">
                 <Button type="button" variant="outline" onClick={() => setIsProductDetailDialogOpen(false)}>
                   Cancel
                 </Button>
@@ -1928,26 +2728,41 @@ export default function InventoryPage() {
 
                 {isLoadingModifiers ? (
                   <div className="text-center py-4">Loading modifiers...</div>
-                ) : availableModifiers.length === 0 ? (
-                  <div className="text-center py-4">No modifiers available. Create modifiers first.</div>
+                ) : !availableModifiers || availableModifiers.length === 0 ? (
+                  <div className="text-center py-4">
+                    No modifiers available. Create modifiers first.
+                    <div className="mt-2">
+                      <Button variant="link" asChild>
+                        <a href="/items/modifiers">Create Modifiers</a>
+                      </Button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
                     {availableModifiers.map(modifier => {
-                      // Check if this modifier is already linked to the product
-                      const isLinked = productModifiers.some(pm => pm.modifierId === modifier.id);
+                      // Check if this modifier is already selected
+                      const isSelected = productModifiers.some(pm => pm.modifierId === modifier.id);
 
                       return (
                         <div key={modifier.id} className="flex items-center justify-between p-2 border rounded">
                           <span>{modifier.name}</span>
                           <Button
-                            variant={isLinked ? "destructive" : "default"}
+                            variant={isSelected ? "destructive" : "default"}
                             size="sm"
-                            onClick={() => isLinked
-                              ? handleRemoveModifier(modifier.id)
-                              : handleAddModifier(modifier.id)
-                            }
+                            onClick={() => {
+                              if (isSelected) {
+                                setProductModifiers(productModifiers.filter(
+                                  pm => pm.modifierId !== modifier.id
+                                ));
+                              } else {
+                                setProductModifiers([
+                                  ...productModifiers,
+                                  { id: Date.now(), modifierId: modifier.id, productId: 0 }
+                                ]);
+                              }
+                            }}
                           >
-                            {isLinked ? "Remove" : "Add"}
+                            {isSelected ? "Remove" : "Add"}
                           </Button>
                         </div>
                       );
@@ -1957,10 +2772,10 @@ export default function InventoryPage() {
               </div>
 
               <div className="border rounded-md">
-                <h3 className="font-medium p-4 border-b">Current Modifiers</h3>
+                <h3 className="font-medium p-4 border-b">Selected Modifiers</h3>
                 {productModifiers.length === 0 ? (
                   <div className="p-8 text-center text-gray-500">
-                    No modifiers linked to this product.
+                    No modifiers selected. Modifiers will be linked after saving the product.
                   </div>
                 ) : (
                   <ul className="divide-y max-h-60 overflow-y-auto">
@@ -1969,12 +2784,16 @@ export default function InventoryPage() {
 
                       return (
                         <li key={modifier.id} className="flex items-center justify-between p-4">
-                          <span className="font-medium">{modifierDetails?.name || `Modifier #${modifier.modifierId}`}</span>
+                          <span className="font-medium">
+                            {modifierDetails?.name || `Modifier #${modifier.modifierId}`}
+                          </span>
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-8 w-8 p-0 text-red-600"
-                            onClick={() => handleRemoveModifier(modifier.modifierId)}
+                            onClick={() => {
+                              setProductModifiers(productModifiers.filter(m => m.id !== modifier.id));
+                            }}
                           >
                             <Trash className="h-4 w-4" />
                           </Button>
@@ -2042,12 +2861,12 @@ export default function InventoryPage() {
                 <h3 className="font-medium mb-3">Add Allergen</h3>
                 <div className="flex gap-2 items-end">
                   <div className="flex-1">
-                    <Label htmlFor="allergenSelect" className="mb-2">Select Allergen*</Label>
+                    <Label htmlFor="edit-allergenSelect" className="mb-2">Select Allergen*</Label>
                     <Select
                       value={selectedAllergenId?.toString() || ""}
                       onValueChange={handleAllergenSelect}
                     >
-                      <SelectTrigger id="allergenSelect">
+                      <SelectTrigger id="edit-allergenSelect">
                         <SelectValue placeholder="Select an allergen" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2078,12 +2897,12 @@ export default function InventoryPage() {
                     </Select>
                   </div>
                   <div className="w-32">
-                    <Label htmlFor="allergenseverity" className="mb-2">Severity</Label>
+                    <Label htmlFor="edit-allergenseverity" className="mb-2">Severity</Label>
                     <Select
                       value={selectedSeverity}
                       onValueChange={(value) => setSelectedSeverity(value as "mild" | "moderate" | "severe")}
                     >
-                      <SelectTrigger id="allergenseverity">
+                      <SelectTrigger id="edit-allergenseverity">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

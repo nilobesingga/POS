@@ -156,7 +156,12 @@ router.post('/', async (req, res) => {
 router.patch('/:id', async (req, res) => {
     try {
         const id = parseInt(req.params.id);
-        const updates = req.body;
+        const updates = { ...req.body };
+
+        // Handle numeric fields - convert empty strings to null
+        if (updates.price === '') updates.price = null;
+        if (updates.cost === '') updates.cost = null;
+        if (updates.stockQuantity === '') updates.stockQuantity = null;
 
         // Set updated timestamp
         updates.updatedAt = new Date();
@@ -173,7 +178,8 @@ router.patch('/:id', async (req, res) => {
         res.json(updated);
     } catch (error) {
         console.error('Failed to update product:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        const errorMessage = error instanceof Error ? error.message : 'unknown error';
+        res.status(500).json({ error: `Failed to update product: ${errorMessage}` });
     }
 });
 
