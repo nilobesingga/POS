@@ -26,248 +26,20 @@ import { AlertTriangle, Check, Grid, List } from "lucide-react";
 interface ProductCardProps {
   product: Product;
   onAddToCart: (product: Product, quantity: number) => void;
-}
-
-function ProductCard({ product, onAddToCart }: ProductCardProps) {
-  const { format } = useCurrency();
-  const [showAllergens, setShowAllergens] = useState(false);
-  const [showQuantity, setShowQuantity] = useState(false);
-  const [quantity, setQuantity] = useState(1);
-  const [quantityError, setQuantityError] = useState("");
-
-  // Helper function to get severity color
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case "severe": return "bg-red-100 text-red-800 border-red-200";
-      case "moderate": return "bg-yellow-100 text-yellow-800 border-yellow-200";
-      case "mild": return "bg-blue-100 text-blue-800 border-blue-200";
-      default: return "bg-gray-100 text-gray-800 border-gray-200";
-    }
-  };
-
-  // Handle quantity change with validation
-  const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = parseInt(e.target.value);
-
-    // Basic validation for numeric input
-    if (isNaN(newValue)) {
-      setQuantity(1);
-      setQuantityError("");
-      return;
-    }
-
-    // Validate against available stock
-    if (product.stockQuantity !== undefined && newValue > product.stockQuantity) {
-      setQuantityError(`Only ${product.stockQuantity} available`);
-    } else if (newValue <= 0) {
-      setQuantityError("Quantity must be at least 1");
-    } else {
-      setQuantityError("");
-    }
-
-    setQuantity(newValue);
-  };
-
-  // Handle add to cart with quantity
-  const handleAddToCart = () => {
-    if (quantityError) return;
-
-    // If quantity is valid, call the parent handler with the product and quantity
-    onAddToCart(product, quantity);
-
-    // Reset quantity after adding to cart
-    setQuantity(1);
-    setShowQuantity(false);
-  };
-
-  return (
-    <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
-      <div className="p-4">
-        {/* Fixed aspect ratio container with consistent height */}
-        <div className="relative w-full pb-[100%]">
-          <div className="absolute inset-0 rounded-lg overflow-hidden">
-            {product.imageUrl ? (
-              <img
-                src={product.imageUrl}
-                alt={product.name}
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                <span className="text-gray-400">No image</span>
-              </div>
-            )}
-            {/* Out of stock overlay */}
-            {!product.inStock && (
-              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                <span className="text-white font-medium px-3 py-1 bg-red-500 rounded-full text-sm">
-                  Out of Stock
-                </span>
-              </div>
-            )}
-
-            {/* Allergen warning icon */}
-            {product.hasAllergens && Array.isArray(product.allergens) && product.allergens.length > 0 && (
-              <Popover open={showAllergens} onOpenChange={setShowAllergens}>
-                <PopoverTrigger asChild>
-                  <button
-                    className="absolute top-2 right-2 bg-yellow-500 text-white p-1 rounded-full hover:bg-yellow-600 transition-colors"
-                    title="View allergens"
-                  >
-                    <AlertTriangle className="h-4 w-4" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-3 bg-white" align="end">
-                  <div>
-                    <h4 className="font-semibold text-sm mb-2 flex items-center">
-                      <AlertTriangle className="h-4 w-4 mr-1 text-yellow-500" />
-                      Allergen Information
-                    </h4>
-                    <div className="max-h-[200px] overflow-y-auto">
-                      {product.allergens.map((allergen: { name: string; severity?: string }, index: number) => (
-                        <div
-                          key={index}
-                          className={`text-xs px-2 py-1 mb-1 rounded-md border ${getSeverityColor(allergen.severity || 'moderate')}`}
-                        >
-                          <span className="font-medium">{allergen.name}</span>
-                          {allergen.severity && (
-                            <span className="ml-1 text-xs opacity-75">
-                              ({allergen.severity})
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            )}
-          </div>
-        </div>
-
-        {/* Product details section with fixed height */}
-        <div className="mt-4 min-h-[120px] flex flex-col">
-          <h3 className="text-sm font-medium text-gray-900 line-clamp-2 mb-2">{product.name}</h3>
-
-          {/* Product description */}
-          {typeof product.description === 'string' && product.description && (
-            <p className="text-xs text-gray-500 line-clamp-2 mb-2">
-              {product.description}
-            </p>
-          )}
-
-          {/* Allergen badges - now we'll just show a few */}
-          {/* {product.hasAllergens && Array.isArray(product.allergens) && product.allergens.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1 items-center">
-              {product.allergens.slice(0, 2).map((allergen: { name: string; severity?: string }, index: number) => (
-                <span
-                  key={index}
-                  className={`text-xs px-2 py-0.5 rounded-full border ${getSeverityColor(allergen.severity || 'moderate')}`}
-                >
-                  {allergen.name}
-                </span>
-              ))}
-              {product.allergens.length > 2 && (
-                <span className="text-xs text-gray-500">
-                  +{product.allergens.length - 2} more
-                </span>
-              )}
-            </div>
-          )} */}
-
-          {/* Additional info badges */}
-          <div className="flex flex-wrap gap-1 mb-2">
-            {product.isTaxable && (
-              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                Vatable
-              </span>
-            )}
-            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-              {product.soldBy === 'weight' ? 'Sold by weight' : 'Sold by unit'}
-            </span>
-            {product.stockQuantity > 0 && (
-              <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">
-                In stock: {product.stockQuantity}
-              </span>
-            )}
-          </div>
-
-          {/* Price and add to cart section - always at the bottom */}
-          <div className="mt-auto flex justify-between items-center">
-            <p className="font-bold text-primary">{format(Number(product.price))}</p>
-            <Popover open={showQuantity && product.inStock} onOpenChange={(open) => product.inStock && setShowQuantity(open)}>
-              <PopoverTrigger asChild>
-                <button
-                  className={`text-gray-500 hover:text-primary ${!product.inStock ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  disabled={!product.inStock}
-                  title={product.inStock ? 'Add to cart' : 'Out of stock'}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-3" side="top" align="center">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-medium">Add to Cart</h4>
-                    <span className="text-sm text-gray-500">
-                      {product.stockQuantity !== undefined ? `${product.stockQuantity} available` : ''}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label htmlFor="quantity" className="text-sm font-medium">Quantity:</label>
-                    <div className="flex-1">
-                      <Input
-                        id="quantity"
-                        type="number"
-                        min="1"
-                        max={product.stockQuantity}
-                        value={quantity}
-                        onChange={handleQuantityChange}
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
-                  {quantityError && <p className="text-xs text-red-500">{quantityError}</p>}
-                  <div className="flex justify-end gap-2 mt-3">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowQuantity(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={!!quantityError || quantity < 1}
-                      onClick={handleAddToCart}
-                      className="bg-primary text-white"
-                    >
-                      Add
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProductListItem({ product, onAddToCart, getSeverityColor, format }: {
-  product: Product;
-  onAddToCart: (product: Product, quantity: number) => void;
   getSeverityColor: (severity: string) => string;
   format: (value: number | string | null | undefined) => string;
-}) {
-  const [showListAllergens, setShowListAllergens] = useState(false);
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+  categoryName?: string;
+}
+
+function ProductCard({ product, onAddToCart, getSeverityColor, format, isFavorite = false, onToggleFavorite = () => {}, categoryName }: ProductCardProps) {
+  const [showAllergens, setShowAllergens] = useState(false);
   const [showQuantity, setShowQuantity] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [quantityError, setQuantityError] = useState("");
+  const [addedToCart, setAddedToCart] = useState(false);
 
   // Handle quantity change with validation
   const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -276,106 +48,174 @@ function ProductListItem({ product, onAddToCart, getSeverityColor, format }: {
     // Basic validation for numeric input
     if (isNaN(newValue)) {
       setQuantity(1);
-      setQuantityError("");
+      setQuantityError("Please enter a valid number");
       return;
     }
 
-    // Validate against available stock
+    // Validate against stock quantity if available
     if (product.stockQuantity !== undefined && newValue > product.stockQuantity) {
-      setQuantityError(`Only ${product.stockQuantity} available`);
-    } else if (newValue <= 0) {
-      setQuantityError("Quantity must be at least 1");
-    } else {
-      setQuantityError("");
+      setQuantity(product.stockQuantity);
+      setQuantityError(`Maximum available: ${product.stockQuantity}`);
+      return;
     }
 
+    // Success case
     setQuantity(newValue);
+    setQuantityError("");
   };
 
-  // Handle add to cart with quantity
+  // Function to handle quick add with animation
+  const handleQuickAdd = (qty: number) => {
+    if (product.inStock) {
+      onAddToCart(product, qty);
+      // Show added animation
+      setAddedToCart(true);
+      setTimeout(() => setAddedToCart(false), 750);
+    }
+  };
+
+  // Function to handle custom quantity add
   const handleAddToCart = () => {
-    if (quantityError) return;
-
-    // If quantity is valid, call the parent handler with the product and quantity
-    onAddToCart(product, quantity);
-
-    // Reset quantity after adding to cart
-    setQuantity(1);
-    setShowQuantity(false);
+    if (product.inStock && quantity > 0) {
+      onAddToCart(product, quantity);
+      setShowQuantity(false);
+      // Show added animation
+      setAddedToCart(true);
+      setTimeout(() => setAddedToCart(false), 750);
+    }
   };
+
+  // Quick add quantities
+  const quickAddOptions = [1, 2, 5, 10];
 
   return (
-    <div className="flex bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-3">
-      {/* Product image */}
-      <div className="w-20 h-20 relative flex-shrink-0">
+    <div
+      className={`flex flex-col bg-white rounded-lg transition-all duration-300 ${
+        addedToCart
+          ? 'ring-2 ring-primary shadow-md transform scale-[1.02]'
+          : 'shadow-sm hover:shadow-md hover:translate-y-[-2px]'
+      } overflow-hidden h-full relative`}
+      onMouseEnter={() => setShowQuickAdd(true)}
+      onMouseLeave={() => setShowQuickAdd(false)}
+    >
+      {/* Product Image */}
+      <div className="w-full h-36 relative overflow-hidden group">
         {product.imageUrl ? (
           <img
             src={product.imageUrl}
             alt={product.name}
-            className="w-full h-full object-cover rounded-md"
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
             loading="lazy"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-md">
-            <span className="text-gray-400 text-xs">No image</span>
+          <div className="w-full h-full flex items-center justify-center bg-gray-100">
+            <span className="text-gray-400">No image</span>
           </div>
         )}
+
+        {/* Out of stock overlay */}
         {!product.inStock && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-md">
-            <span className="text-white font-medium px-2 py-0.5 bg-red-500 rounded-full text-xs">
+          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center backdrop-blur-sm">
+            <span className="text-white font-medium px-3 py-1 bg-red-500 rounded-full text-xs shadow-md">
               Out of Stock
             </span>
           </div>
         )}
 
-        {/* Allergen warning icon for list view */}
+        {/* Category badge - Show at top left */}
+        {categoryName && (
+          <div className="absolute top-2 left-2">
+            <span className="bg-black/40 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
+              {categoryName}
+            </span>
+          </div>
+        )}
+
+        {/* Allergen warning icon */}
         {product.hasAllergens && Array.isArray(product.allergens) && product.allergens.length > 0 && (
-          <Popover open={showListAllergens} onOpenChange={setShowListAllergens}>
+          <Popover open={showAllergens} onOpenChange={setShowAllergens}>
             <PopoverTrigger asChild>
               <button
-                className="absolute top-0 right-0 bg-yellow-500 text-white p-1 rounded-full hover:bg-yellow-600 transition-colors"
-                title="View allergens"
+                className="absolute top-2 right-2 bg-yellow-500 rounded-full w-6 h-6 flex items-center justify-center shadow-sm hover:bg-yellow-600 transition-colors duration-200"
+                onClick={() => setShowAllergens(true)}
               >
-                <AlertTriangle className="h-3 w-3" />
+                <AlertTriangle className="h-4 w-4 text-white" />
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-3 bg-white" align="end">
-              <div>
-                <h4 className="font-semibold text-sm mb-2 flex items-center">
-                  <AlertTriangle className="h-4 w-4 mr-1 text-yellow-500" />
-                  Allergen Information
-                </h4>
-                <div className="max-h-[200px] overflow-y-auto">
-                  {product.allergens.map((allergen: { name: string; severity?: string }, index: number) => (
-                    <div
-                      key={index}
-                      className={`text-xs px-2 py-1 mb-1 rounded-md border ${getSeverityColor(allergen.severity || 'moderate')}`}
-                    >
-                      <span className="font-medium">{allergen.name}</span>
-                      {allergen.severity && (
-                        <span className="ml-1 text-xs opacity-75">
-                          ({allergen.severity})
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+            <PopoverContent className="w-64 p-3 shadow-xl border border-yellow-100" side="right">
+              <h4 className="font-bold text-sm mb-2 flex items-center">
+                <AlertTriangle className="h-4 w-4 text-yellow-500 mr-2" />
+                Allergens
+              </h4>
+              <div className="max-h-[200px] overflow-y-auto">
+                {product.allergens.map((allergen: { name: string; severity?: string }, index: number) => (
+                  <div
+                    key={index}
+                    className={`text-xs px-2 py-1 mb-1 rounded-md border ${getSeverityColor(allergen.severity || 'moderate')}`}
+                  >
+                    <span className="font-medium">{allergen.name}</span>
+                    {allergen.severity && (
+                      <span className="ml-1 text-xs opacity-75">
+                        ({allergen.severity})
+                      </span>
+                    )}
+                  </div>
+                ))}
               </div>
             </PopoverContent>
           </Popover>
         )}
+
+        {/* Quick-add buttons overlay that appears on hover with improved gradient */}
+        {product.inStock && (
+          <div
+            className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-3 transition-all duration-300 ${
+              showQuickAdd ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+            }`}
+          >
+            <div className="flex justify-center gap-1">
+              {quickAddOptions.map(qty => (
+                <button
+                  key={qty}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQuickAdd(qty);
+                  }}
+                  className={`h-9 w-9 rounded-md flex items-center justify-center transition-all duration-200 ${
+                    qty === 1
+                      ? 'bg-primary text-white hover:bg-blue-600 shadow-md'
+                      : 'bg-white/90 text-primary hover:bg-white shadow-sm'
+                  }`}
+                  title={`Add ${qty} ${qty === 1 ? 'item' : 'items'}`}
+                >
+                  <span className="text-sm font-medium">{qty}</span>
+                </button>
+              ))}
+              <button
+                className="h-9 w-9 rounded-md flex items-center justify-center bg-white/90 text-primary hover:bg-white shadow-sm transition-all duration-200"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowQuantity(true);
+                }}
+                title="Custom quantity"
+              >
+                <span>...</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Product details */}
-      <div className="ml-4 flex-1 flex flex-col min-w-0">
+      {/* Product details with improved spacing and typography */}
+      <div className="p-3 flex flex-col flex-grow">
         <div className="flex items-center">
-          <h3 className="font-medium text-gray-900 truncate">{product.name}</h3>
+          <h3 className="font-medium text-gray-900 truncate leading-tight">{product.name}</h3>
           {/* Allergen indicator beside product name */}
           {product.hasAllergens && Array.isArray(product.allergens) && product.allergens.length > 0 && (
             <span
               className="ml-2 text-yellow-500 cursor-help"
               title="Contains allergens"
-              onClick={() => setShowListAllergens(true)}
+              onClick={() => setShowAllergens(true)}
             >
               <AlertTriangle className="h-3 w-3" />
             </span>
@@ -383,62 +223,84 @@ function ProductListItem({ product, onAddToCart, getSeverityColor, format }: {
         </div>
 
         {typeof product.description === 'string' && product.description && (
-          <p className="text-xs text-gray-500 line-clamp-1 mb-1">
+          <p className="text-xs text-gray-500 line-clamp-2 mt-1 mb-1">
             {product.description}
           </p>
         )}
 
-        {/* Allergens inline */}
+        {/* Tags, badges or attributes - show allergens as tags */}
         {product.hasAllergens && Array.isArray(product.allergens) && product.allergens.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-1">
-            {product.allergens.slice(0, 3).map((allergen: { name: string; severity?: string }, index: number) => (
+          <div className="flex flex-wrap gap-1 my-1">
+            {product.allergens.slice(0, 2).map((allergen: { name: string; severity?: string }, index: number) => (
               <span
                 key={index}
-                className="text-xs px-1 py-0 rounded-sm border bg-yellow-50 text-yellow-800 border-yellow-200"
+                className="text-xs px-1.5 py-0.5 rounded bg-yellow-50 text-yellow-800 border border-yellow-200"
               >
                 {allergen.name}
               </span>
             ))}
-            {product.allergens.length > 3 && (
-              <span className="text-xs text-gray-500">+{product.allergens.length - 3} more</span>
+            {product.allergens.length > 2 && (
+              <span
+                className="text-xs px-1.5 py-0.5 rounded bg-yellow-50 text-yellow-800 border border-yellow-200 cursor-pointer"
+                onClick={() => setShowAllergens(true)}
+              >
+                +{product.allergens.length - 2}
+              </span>
             )}
           </div>
         )}
 
-        {/* Stock indicator */}
-        {product.stockQuantity > 0 && (
-          <div className="text-xs text-green-600 mb-1">
-            In stock: {product.stockQuantity}
+        {/* Stock indicator with improved styling */}
+        {product.stockQuantity !== undefined && (
+          <div className={`text-xs mt-1 ${
+            product.stockQuantity > 10
+              ? 'text-green-600'
+              : product.stockQuantity > 0
+                ? 'text-amber-600'
+                : 'text-red-600'
+          }`}>
+            {product.stockQuantity > 0
+              ? `In stock: ${product.stockQuantity}`
+              : 'Out of stock'}
           </div>
         )}
 
-        {/* Price and add button on same line */}
-        <div className="mt-auto flex items-center justify-between">
-          <p className="font-bold text-primary">{format(Number(product.price))}</p>
+        {/* Price at the bottom with more prominence */}
+        <div className="mt-auto flex items-center justify-between pt-2">
+          <p className="font-bold text-primary text-lg">{format(Number(product.price))}</p>
 
+          {/* Add to cart button - now using conditional rendering for cleaner UI */}
+          <Button
+            size="sm"
+            onClick={() => product.inStock && (showQuickAdd ? handleQuickAdd(1) : setShowQuickAdd(true))}
+            disabled={!product.inStock}
+            className={`transition-all duration-200 ${
+              !product.inStock
+                ? 'bg-gray-100 text-gray-400'
+                : addedToCart
+                  ? 'bg-green-600 text-white'
+                  : 'bg-primary text-white hover:bg-blue-600'
+            }`}
+          >
+            {addedToCart ? 'Added!' : 'Add'}
+          </Button>
+
+          {/* Custom quantity popover - now with improved styling */}
           <Popover open={showQuantity && product.inStock} onOpenChange={(open) => product.inStock && setShowQuantity(open)}>
-            <PopoverTrigger asChild>
-              <Button
-                size="sm"
-                disabled={!product.inStock}
-                className={!product.inStock ? "opacity-50 cursor-not-allowed" : ""}
-              >
-                Add to Cart
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 p-3" side="top" align="end">
+            <PopoverContent className="w-64 p-3 shadow-xl border border-gray-100 rounded-xl" side="top" align="end">
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-medium">{product.name}</h4>
+                  <h4 className="font-medium text-sm">{product.name}</h4>
                   <span className="text-sm text-gray-500">
                     {product.stockQuantity !== undefined ? `${product.stockQuantity} available` : ''}
                   </span>
                 </div>
+
                 <div className="flex items-center gap-2">
-                  <label htmlFor="listQuantity" className="text-sm font-medium">Quantity:</label>
+                  <label htmlFor="cardQuantity" className="text-sm font-medium">Quantity:</label>
                   <div className="flex-1">
                     <Input
-                      id="listQuantity"
+                      id="cardQuantity"
                       type="number"
                       min="1"
                       max={product.stockQuantity}
@@ -449,11 +311,27 @@ function ProductListItem({ product, onAddToCart, getSeverityColor, format }: {
                   </div>
                 </div>
                 {quantityError && <p className="text-xs text-red-500">{quantityError}</p>}
+
+                {/* Quick preset buttons with improved styling */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[5, 10, 15, 20].map(qty => (
+                    <button
+                      key={qty}
+                      className="p-1.5 border rounded text-sm hover:bg-primary hover:text-white hover:border-primary transition-colors duration-150"
+                      onClick={() => setQuantity(qty)}
+                    >
+                      {qty}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="flex justify-end gap-2 mt-3">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setShowQuantity(false)}
+                    onClick={() => {
+                      setShowQuantity(false);
+                    }}
                   >
                     Cancel
                   </Button>
@@ -471,6 +349,343 @@ function ProductListItem({ product, onAddToCart, getSeverityColor, format }: {
           </Popover>
         </div>
       </div>
+
+      {/* "Added to cart" animation overlay */}
+      {addedToCart && (
+        <div className="absolute inset-0 bg-primary/10 flex items-center justify-center pointer-events-none">
+          <div className="bg-white rounded-full p-2 shadow-lg">
+            <Check className="h-6 w-6 text-green-500"/>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductListItem({ product, onAddToCart, getSeverityColor, format, isFavorite = false, onToggleFavorite = () => {}, categoryName }: ProductCardProps) {
+  const [showListAllergens, setShowListAllergens] = useState(false);
+  const [showQuantity, setShowQuantity] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [quantityError, setQuantityError] = useState("");
+  const [addedToCart, setAddedToCart] = useState(false);
+
+  // Handle quantity change with validation
+  const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = parseInt(e.target.value);
+
+    // Basic validation for numeric input
+    if (isNaN(newValue)) {
+      setQuantity(1);
+      setQuantityError("Please enter a valid number");
+      return;
+    }
+
+    // Validate against stock quantity if available
+    if (product.stockQuantity !== undefined && newValue > product.stockQuantity) {
+      setQuantity(product.stockQuantity);
+      setQuantityError(`Maximum available: ${product.stockQuantity}`);
+      return;
+    }
+
+    // Success case
+    setQuantity(newValue);
+    setQuantityError("");
+  };
+
+  // Function to handle quick add with animation
+  const handleQuickAdd = (qty: number) => {
+    if (product.inStock) {
+      onAddToCart(product, qty);
+      // Show added animation
+      setAddedToCart(true);
+      setTimeout(() => setAddedToCart(false), 750);
+    }
+  };
+
+  // Function to handle custom quantity add
+  const handleAddToCart = () => {
+    if (product.inStock && quantity > 0) {
+      onAddToCart(product, quantity);
+      setShowQuantity(false);
+      // Show added animation
+      setAddedToCart(true);
+      setTimeout(() => setAddedToCart(false), 750);
+    }
+  };
+
+  // Quick add quantities
+  const quickAddOptions = [1, 2, 5, 10];
+
+  return (
+    <div
+      className={`flex bg-white rounded-lg transition-all duration-300 ${
+        addedToCart
+          ? 'ring-2 ring-primary shadow-md'
+          : 'shadow-sm hover:shadow-md hover:translate-x-[-1px]'
+      } relative p-3`}
+      onMouseEnter={() => setShowQuickAdd(true)}
+      onMouseLeave={() => setShowQuickAdd(false)}
+    >
+      {/* Product image with hover effect */}
+      <div className="w-20 h-20 relative flex-shrink-0 overflow-hidden rounded-md group">
+        {product.imageUrl ? (
+          <img
+            src={product.imageUrl}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-md">
+            <span className="text-gray-400 text-xs">No image</span>
+          </div>
+        )}
+
+        {/* Out of stock overlay */}
+        {!product.inStock && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-md backdrop-blur-sm">
+            <span className="text-white font-medium px-2 py-0.5 bg-red-500 rounded-full text-xs shadow-sm">
+              Out of Stock
+            </span>
+          </div>
+        )}
+
+        {/* Category label (if present) */}
+        {categoryName && (
+          <div className="absolute top-0 left-0 px-1.5 py-0.5 text-xs bg-black/40 text-white rounded-br-md backdrop-blur-sm">
+            {categoryName}
+          </div>
+        )}
+
+        {/* Allergen warning icon for list view */}
+        {product.hasAllergens && Array.isArray(product.allergens) && product.allergens.length > 0 && (
+          <Popover open={showListAllergens} onOpenChange={setShowListAllergens}>
+            <PopoverTrigger asChild>
+              <button
+                className="absolute top-0 right-0 bg-yellow-500 rounded-full w-5 h-5 flex items-center justify-center shadow-sm -mt-1 -mr-1 hover:bg-yellow-600 transition-colors duration-200"
+                onClick={() => setShowListAllergens(true)}
+              >
+                <AlertTriangle className="h-3 w-3 text-white" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3 shadow-xl border border-yellow-100" side="right">
+              <h4 className="font-bold text-sm mb-2 flex items-center">
+                <AlertTriangle className="h-4 w-4 text-yellow-500 mr-2" />
+                Allergens
+              </h4>
+              <div className="max-h-[200px] overflow-y-auto">
+                {product.allergens.map((allergen: { name: string; severity?: string }, index: number) => (
+                  <div
+                    key={index}
+                    className={`text-xs px-2 py-1 mb-1 rounded-md border ${getSeverityColor(allergen.severity || 'moderate')}`}
+                  >
+                    <span className="font-medium">{allergen.name}</span>
+                    {allergen.severity && (
+                      <span className="ml-1 text-xs opacity-75">
+                        ({allergen.severity})
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
+      </div>
+
+      {/* Product details */}
+      <div className="ml-4 flex-1 flex flex-col min-w-0">
+        <div className="flex items-center">
+          <h3 className="font-medium text-gray-900 truncate leading-tight">{product.name}</h3>
+          {/* Allergen indicator beside product name */}
+          {product.hasAllergens && Array.isArray(product.allergens) && product.allergens.length > 0 && (
+            <span
+              className="ml-2 text-yellow-500 cursor-help"
+              title="Contains allergens"
+              onClick={() => setShowListAllergens(true)}
+            >
+              <AlertTriangle className="h-3 w-3" />
+            </span>
+          )}
+        </div>
+
+        {typeof product.description === 'string' && product.description && (
+          <p className="text-xs text-gray-500 line-clamp-2 mb-1">
+            {product.description}
+          </p>
+        )}
+
+        {/* Allergen tags */}
+        {product.hasAllergens && Array.isArray(product.allergens) && product.allergens.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-1">
+            {product.allergens.slice(0, 2).map((allergen: { name: string; severity?: string }, index: number) => (
+              <span
+                key={index}
+                className="text-xs px-1.5 py-0.5 rounded bg-yellow-50 text-yellow-800 border border-yellow-200"
+              >
+                {allergen.name}
+              </span>
+            ))}
+            {product.allergens.length > 2 && (
+              <span
+                className="text-xs px-1.5 py-0.5 rounded bg-yellow-50 text-yellow-800 border border-yellow-200 cursor-pointer"
+                onClick={() => setShowListAllergens(true)}
+              >
+                +{product.allergens.length - 2}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Stock indicator with improved styling */}
+        {product.stockQuantity !== undefined && (
+          <div className={`text-xs mb-1 ${
+            product.stockQuantity > 10
+              ? 'text-green-600'
+              : product.stockQuantity > 0
+                ? 'text-amber-600'
+                : 'text-red-600'
+          }`}>
+            {product.stockQuantity > 0
+              ? `In stock: ${product.stockQuantity}`
+              : 'Out of stock'}
+          </div>
+        )}
+
+        {/* Price and add buttons on same line */}
+        <div className="mt-auto flex items-center justify-between">
+          <p className="font-bold text-primary text-lg">{format(Number(product.price))}</p>
+
+          {/* Quick Add buttons or standard Add to Cart button */}
+          <div className="flex items-center">
+            {product.inStock ? (
+              showQuickAdd ? (
+                <div className="flex items-center space-x-1.5">
+                  {quickAddOptions.map(qty => (
+                    <button
+                      key={qty}
+                      onClick={() => handleQuickAdd(qty)}
+                      className={`h-8 w-9 rounded-md flex items-center justify-center transition-all duration-200 shadow-sm ${
+                        qty === 1
+                          ? 'bg-primary text-white hover:bg-blue-600'
+                          : 'bg-blue-50 text-primary hover:bg-blue-100 border border-blue-200'
+                      }`}
+                      title={`Add ${qty} ${qty === 1 ? 'item' : 'items'}`}
+                    >
+                      <span className="text-sm font-medium">{qty}</span>
+                    </button>
+                  ))}
+
+                  {/* Custom quantity button */}
+                  <button
+                    className="w-8 h-8 rounded-md flex items-center justify-center border border-gray-300 hover:bg-gray-100 transition-colors duration-200"
+                    onClick={() => {
+                      setShowQuickAdd(false);
+                      setShowQuantity(true);
+                    }}
+                    title="Custom quantity"
+                  >
+                    <span className="text-xs">...</span>
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => setShowQuickAdd(true)}
+                  className={`transition-all duration-200 ${
+                    addedToCart
+                      ? 'bg-green-600 text-white'
+                      : 'bg-primary text-white hover:bg-blue-600'
+                  }`}
+                >
+                  {addedToCart ? 'Added!' : 'Add'}
+                </Button>
+              )
+            ) : (
+              <Button
+                size="sm"
+                disabled
+                className="bg-gray-100 text-gray-400 cursor-not-allowed"
+              >
+                Out of Stock
+              </Button>
+            )}
+          </div>
+
+          {/* Custom quantity popover */}
+          <Popover open={showQuantity} onOpenChange={(open) => product.inStock && setShowQuantity(open)}>
+            <PopoverContent className="w-64 p-3 shadow-xl border border-gray-100 rounded-xl" side="top" align="end">
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-medium text-sm">{product.name}</h4>
+                  <span className="text-sm text-gray-500">
+                    {product.stockQuantity !== undefined ? `${product.stockQuantity} available` : ''}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label htmlFor="listQuantity" className="text-sm font-medium">Quantity:</label>
+                  <div className="flex-1">
+                    <Input
+                      id="listQuantity"
+                      type="number"
+                      min="1"
+                      max={product.stockQuantity}
+                      value={quantity}
+                      onChange={handleQuantityChange}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+                {quantityError && <p className="text-xs text-red-500">{quantityError}</p>}
+
+                {/* Quick preset buttons for common quantities */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[5, 10, 15, 20].map(qty => (
+                    <button
+                      key={qty}
+                      className="p-1.5 border rounded text-sm hover:bg-primary hover:text-white hover:border-primary transition-colors duration-150"
+                      onClick={() => setQuantity(qty)}
+                    >
+                      {qty}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex justify-end gap-2 mt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setShowQuantity(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!!quantityError || quantity < 1}
+                    onClick={handleAddToCart}
+                    className="bg-primary text-white"
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
+      {/* "Added to cart" animation overlay */}
+      {addedToCart && (
+        <div className="absolute inset-0 bg-primary/10 flex items-center justify-center pointer-events-none rounded-lg">
+          <div className="bg-white rounded-full p-2 shadow-lg">
+            <Check className="h-6 w-6 text-green-500"/>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -497,18 +712,17 @@ function ProductsLoading() {
 export default function ProductSection() {
   const { addToCart } = useCart();
   const { toast } = useToast();
-  const { format } = useCurrency();  // Move the hook call here to the component level
+  const { format } = useCurrency();
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-
-  // Filter state
   const [showInStockOnly, setShowInStockOnly] = useState(false);
   const [showTaxableOnly, setShowTaxableOnly] = useState(false);
   const [sortBy, setSortBy] = useState<"name" | "price" | "newest">("name");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [favoriteProducts, setFavoriteProducts] = useState<number[]>([]);
 
   // Fetch products
   const {
@@ -535,6 +749,64 @@ export default function ProductSection() {
       return response.json();
     }
   });
+
+  // Get the category name for a product
+  const getCategoryName = (categoryId: number | null): string => {
+    if (!categoryId) return '';
+    const category = categories?.find(cat => cat.id === categoryId);
+    return category ? category.name : '';
+  };
+
+  // Handle keydown event for barcode/SKU scanning - Only process on Enter key
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // If Enter key is pressed and there's content in the search
+    if (e.key === "Enter" && searchQuery.trim()) {
+      // Prevent default form submission
+      e.preventDefault();
+
+      // Process scan/search
+      processScan(searchQuery);
+    }
+  };
+
+  // Simplified input change handler - just update the search query
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+  };
+
+  // Process the scanned barcode/SKU
+  const processScan = (code: string) => {
+    if (!code || !products) return;
+
+    // Try to find the product by barcode or SKU
+    const foundProduct = products.find(p =>
+      p.barcode === code ||
+      p.sku === code ||
+      p.id?.toString() === code
+    );
+
+    if (foundProduct) {
+      // Add to cart if product is found
+      if (foundProduct.inStock) {
+        handleAddToCart(foundProduct, 1);
+        // Clear search after adding to cart
+        setSearchQuery("");
+      } else {
+        toast({
+          title: "Product out of stock",
+          description: `${foundProduct.name} is currently out of stock`,
+          variant: "destructive"
+        });
+      }
+    } else {
+      toast({
+        title: "Product not found",
+        description: `No product found with code: ${code}`,
+        variant: "destructive"
+      });
+    }
+  };
 
   // Handle add to cart
   const handleAddToCart = (product: Product, quantity: number = 1) => {
@@ -609,6 +881,17 @@ export default function ProductSection() {
     setViewMode(viewMode === "grid" ? "list" : "grid");
   };
 
+  // Toggle favorite status of a product
+  const handleToggleFavorite = (productId: number) => {
+    setFavoriteProducts(prevFavorites => {
+      if (prevFavorites.includes(productId)) {
+        return prevFavorites.filter(id => id !== productId);
+      } else {
+        return [...prevFavorites, productId];
+      }
+    });
+  };
+
   // Effect to ensure data is fetched when component mounts
   useEffect(() => {
     // This will ensure products and categories are fetched immediately when the component mounts
@@ -622,10 +905,12 @@ export default function ProductSection() {
           <div className="flex-1 relative">
             <Input
               type="text"
-              placeholder="Search products..."
+              placeholder="Search products or scan barcode/SKU... (Press Enter)"
               className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              autoFocus
             />
             <div className="absolute left-3 top-2.5 text-gray-400">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -754,6 +1039,18 @@ export default function ProductSection() {
               key={product.id}
               product={product}
               onAddToCart={handleAddToCart}
+              getSeverityColor={(severity: string) => {
+                switch (severity) {
+                  case "severe": return "bg-red-100 text-red-800 border-red-200";
+                  case "moderate": return "bg-yellow-100 text-yellow-800 border-yellow-200";
+                  case "mild": return "bg-blue-100 text-blue-800 border-blue-200";
+                  default: return "bg-gray-100 text-gray-800 border-gray-200";
+                }
+              }}
+              format={format}
+              isFavorite={favoriteProducts.includes(Number(product.id))}
+              onToggleFavorite={() => handleToggleFavorite(Number(product.id))}
+              categoryName={getCategoryName(product.categoryId)}
             />
           ))
         ) : (
@@ -772,6 +1069,9 @@ export default function ProductSection() {
                 }
               }}
               format={format}
+              isFavorite={favoriteProducts.includes(Number(product.id))}
+              onToggleFavorite={() => handleToggleFavorite(Number(product.id))}
+              categoryName={getCategoryName(product.categoryId)}
             />
           ))
         )}

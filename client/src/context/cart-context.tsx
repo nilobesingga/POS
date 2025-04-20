@@ -6,6 +6,7 @@ import { useAuth } from "./auth-context";
 // Extended CartItem to include taxable status
 interface ExtendedCartItem extends CartItem {
   isTaxable?: boolean;
+  notes?: string;
 }
 
 // Extending Cart to use ExtendedCartItem

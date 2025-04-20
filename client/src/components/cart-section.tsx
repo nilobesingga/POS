@@ -462,6 +462,24 @@ export default function CartSection() {
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              const notes = prompt("Add note for this item:", item.notes || "");
+                              if (notes !== null) {
+                                const updatedItems = cart.items.map(cartItem =>
+                                  cartItem.productId === item.productId
+                                    ? {...cartItem, notes: notes}
+                                    : cartItem
+                                );
+                                updateCart({...cart, items: updatedItems});
+                              }
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            <span>{item.notes ? "Edit Note" : "Add Note"}</span>
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleVoidItem(item.productId)} className="text-red-600">
                             <Ban className="mr-2 h-4 w-4" />
                             <span>Void Item</span>
@@ -472,27 +490,55 @@ export default function CartSection() {
                   </div>
                   <div className="flex items-center mt-1">
                     <span className="text-sm text-gray-500">{formatCurrency(item.price)} x {item.quantity}</span>
+                    {item.notes && (
+                      <span className="ml-2 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full truncate max-w-[180px]">
+                        {item.notes}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center mt-2">
-                    <button
-                      className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-100"
-                      onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                      title="Decrease quantity"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                      </svg>
-                    </button>
-                    <span className="mx-2 w-8 text-center">{item.quantity}</span>
-                    <button
-                      className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-100"
-                      onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                      title="Increase quantity"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                    </button>
+
+                  {/* Enhanced quantity controls with presets */}
+                  <div className="flex flex-wrap items-center mt-2 gap-1">
+                    <div className="flex items-center border rounded-md overflow-hidden">
+                      <button
+                        className="px-2 py-1 bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
+                        onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                        disabled={item.quantity <= 1}
+                        title="Decrease quantity"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                        </svg>
+                      </button>
+                      <span className="px-3 py-1 border-x">{item.quantity}</span>
+                      <button
+                        className="px-2 py-1 bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
+                        onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                        title="Increase quantity"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Quick quantity presets */}
+                    <div className="flex gap-1 ml-2">
+                      {[1, 2, 5, 10].map(qty => (
+                        <button
+                          key={qty}
+                          className={`text-xs px-2 py-1 rounded-md ${
+                            item.quantity === qty
+                              ? 'bg-primary text-white'
+                              : 'border border-gray-200 hover:bg-gray-50'
+                          }`}
+                          onClick={() => updateQuantity(item.productId, qty)}
+                        >
+                          {qty}
+                        </button>
+                      ))}
+                    </div>
+
                     <button
                       className="ml-auto text-gray-400 hover:text-red-500"
                       onClick={() => removeFromCart(item.productId)}

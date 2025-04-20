@@ -242,6 +242,76 @@ export const insertOrderSchema = createInsertSchema(orders).pick({
     change: true,
 });
 
+// Kitchen Orders
+export const kitchenOrders = pgTable("kitchen_orders", {
+    id: serial("id").primaryKey(),
+    orderId: integer("order_id").references(() => orders.id).notNull(),
+    status: text("status").notNull().default("pending"),
+    priority: integer("priority").notNull().default(0),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow()
+});
+
+export const insertKitchenOrderSchema = createInsertSchema(kitchenOrders).pick({
+    orderId: true,
+    status: true,
+    priority: true,
+    notes: true,
+});
+
+// Kitchen Order Items
+export const kitchenOrderItems = pgTable("kitchen_order_items", {
+    id: serial("id").primaryKey(),
+    kitchenOrderId: integer("kitchen_order_id").references(() => kitchenOrders.id).notNull(),
+    orderItemId: integer("order_item_id").references(() => orderItems.id).notNull(),
+    status: text("status").notNull().default("pending"),
+    preparationTime: integer("preparation_time"),
+    startedAt: timestamp("started_at"),
+    completedAt: timestamp("completed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow()
+});
+
+export const insertKitchenOrderItemSchema = createInsertSchema(kitchenOrderItems).pick({
+    kitchenOrderId: true,
+    orderItemId: true,
+    status: true,
+    preparationTime: true,
+    startedAt: true,
+    completedAt: true,
+});
+
+// Kitchen Queues
+export const kitchenQueues = pgTable("kitchen_queues", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    storeId: integer("store_id").references(() => storeSettings.id).notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow()
+});
+
+export const insertKitchenQueueSchema = createInsertSchema(kitchenQueues).pick({
+    name: true,
+    storeId: true,
+    isActive: true,
+});
+
+// Kitchen Queue Assignments
+export const kitchenQueueAssignments = pgTable("kitchen_queue_assignments", {
+    id: serial("id").primaryKey(),
+    productId: integer("product_id").references(() => products.id).notNull(),
+    queueId: integer("queue_id").references(() => kitchenQueues.id).notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow()
+});
+
+export const insertKitchenQueueAssignmentSchema = createInsertSchema(kitchenQueueAssignments).pick({
+    productId: true,
+    queueId: true,
+});
+
 // Store Settings
 export const storeSettings = pgTable("store_settings", {
     id: serial("id").primaryKey(),
@@ -491,6 +561,18 @@ export type InsertProductStore = z.infer<typeof insertProductStoreSchema>;
 
 export type ProductModifier = typeof productModifiers.$inferSelect;
 export type InsertProductModifier = z.infer<typeof insertProductModifierSchema>;
+
+export type KitchenOrder = typeof kitchenOrders.$inferSelect;
+export type InsertKitchenOrder = z.infer<typeof insertKitchenOrderSchema>;
+
+export type KitchenOrderItem = typeof kitchenOrderItems.$inferSelect;
+export type InsertKitchenOrderItem = z.infer<typeof insertKitchenOrderItemSchema>;
+
+export type KitchenQueue = typeof kitchenQueues.$inferSelect;
+export type InsertKitchenQueue = z.infer<typeof insertKitchenQueueSchema>;
+
+export type KitchenQueueAssignment = typeof kitchenQueueAssignments.$inferSelect;
+export type InsertKitchenQueueAssignment = z.infer<typeof insertKitchenQueueAssignmentSchema>;
 
 // Types
 export type User = typeof users.$inferSelect;

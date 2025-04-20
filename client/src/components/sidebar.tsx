@@ -8,7 +8,8 @@ import {
     Users,
     Package,
     Percent,
-    ChevronDown
+    ChevronDown,
+    Coffee
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/auth-context';
@@ -52,6 +53,16 @@ export function Sidebar({ className }: SidebarProps) {
                 { name: 'Categories', href: '/items/categories' },
                 { name: 'Modifiers', href: '/items/modifiers' },
                 { name: 'Allergens', href: '/items/allergens' }
+            ]
+        },
+        {
+            name: 'Kitchen',
+            href: '/kitchen-queues',
+            icon: Coffee,
+            permission: 'canManageOrders',
+            subItems: [
+                { name: 'Queue Management', href: '/kitchen-queues' },
+                { name: 'Kitchen Dashboard', href: '/kitchen-orders' }
             ]
         },
         {

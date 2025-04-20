@@ -22,6 +22,8 @@ import ItemsAllergensPage from "@/pages/items-allergens";
 import DiscountsPage from "@/pages/discounts";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
+import KitchenQueuesPage from "@/pages/kitchen-queues";
+import KitchenDashboardPage from "@/pages/kitchen-dashboard";
 import { AuthProvider, useAuth } from "@/context/auth-context";
 import { CartProvider } from "@/context/cart-context";
 import { Toaster } from "@/components/ui/toaster";
@@ -237,6 +239,22 @@ function Routes() {
         <POSLayout>
           <RouteGuard requiredPermission="canManageProducts">
             <DiscountsPage />
+          </RouteGuard>
+        </POSLayout>
+      </Route>
+
+      <Route path="/kitchen-queues">
+        <POSLayout>
+          <RouteGuard requiredPermission="canManageOrders">
+            <KitchenQueuesPage />
+          </RouteGuard>
+        </POSLayout>
+      </Route>
+
+      <Route path="/kitchen-orders">
+        <POSLayout>
+          <RouteGuard requiredPermission="canManageOrders">
+            <KitchenDashboardPage />
           </RouteGuard>
         </POSLayout>
       </Route>

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db } from '../storage';
 import { orders, orderItems, products, users, paymentTypes } from '../../shared/schema';
 import { and, gte, lte, sum, count, desc, sql, eq } from 'drizzle-orm';
-import { format } from 'date-fns';
+import { format as dateFormat } from 'date-fns';
 
 const router = Router();
 
@@ -72,6 +72,10 @@ router.get('/sales', async (req, res) => {
         // Set end time to end of day (23:59:59.999)
         endDate.setHours(23, 59, 59, 999);
 
+        // Convert Date objects to ISO strings for SQL queries
+        const startDateISO = startDate.toISOString();
+        const endDateISO = endDate.toISOString();
+
         // Enhanced Debug logging
         console.log('\n--------- SALES REPORT DEBUG ---------');
         console.log('Report query parameters:', {
@@ -105,15 +109,15 @@ router.get('/sales', async (req, res) => {
         let dateWhereClause;
         if (startDateStr === endDateStr) {
             // If it's the same day (like today), use direct DATE comparison
-            dateWhereClause = sql`DATE(${orders.createdAt}) = DATE(${startDate})`;
-            console.log('Using single date equality filter for:', format(startDate, 'yyyy-MM-dd'));
+            dateWhereClause = sql`DATE(${orders.createdAt}) = DATE(${startDateISO})`;
+            console.log('Using single date equality filter for:', dateFormat(startDate, 'yyyy-MM-dd'));
         } else {
             // For a date range, use between with truncated dates
             dateWhereClause = and(
-                sql`DATE(${orders.createdAt}) >= DATE(${startDate})`,
-                sql`DATE(${orders.createdAt}) <= DATE(${endDate})`
+                sql`DATE(${orders.createdAt}) >= DATE(${startDateISO})`,
+                sql`DATE(${orders.createdAt}) <= DATE(${endDateISO})`
             );
-            console.log('Using date range filter:', format(startDate, 'yyyy-MM-dd'), 'to', format(endDate, 'yyyy-MM-dd'));
+            console.log('Using date range filter:', dateFormat(startDate, 'yyyy-MM-dd'), 'to', dateFormat(endDate, 'yyyy-MM-dd'));
         }
 
         // Check orders matching date range only
@@ -258,23 +262,23 @@ router.get('/sales', async (req, res) => {
         // Calculate trends data for each metric
         const trends = {
             grossSales: dailySales.map(day => ({
-                date: format(new Date(day.date), 'MMM dd'),
+                date: dateFormat(new Date(day.date), 'MMM dd'),
                 value: Number(day.grossSales)
             })),
             refunds: dailySales.map(day => ({
-                date: format(new Date(day.date), 'MMM dd'),
+                date: dateFormat(new Date(day.date), 'MMM dd'),
                 value: Number(day.refunds)
             })),
             discounts: dailySales.map(day => ({
-                date: format(new Date(day.date), 'MMM dd'),
+                date: dateFormat(new Date(day.date), 'MMM dd'),
                 value: Number(day.discounts)
             })),
             netSales: dailySales.map(day => ({
-                date: format(new Date(day.date), 'MMM dd'),
+                date: dateFormat(new Date(day.date), 'MMM dd'),
                 value: Number(day.grossSales) - Number(day.refunds) - Number(day.discounts)
             })),
             grossProfit: dailySales.map(day => ({
-                date: format(new Date(day.date), 'MMM dd'),
+                date: dateFormat(new Date(day.date), 'MMM dd'),
                 value: grossProfit / dailySales.length // Distribute profit evenly across days for trend
             }))
         };
@@ -327,7 +331,11 @@ router.get('/receipts', async (req, res) => {
         // Set end time to end of day (23:59:59.999)
         endDate.setHours(23, 59, 59, 999);
 
-        console.log('Receipts report - Processing date range:', format(startDate, 'yyyy-MM-dd'), 'to', format(endDate, 'yyyy-MM-dd'));
+        // Convert Date objects to ISO strings for SQL queries
+        const startDateISO = startDate.toISOString();
+        const endDateISO = endDate.toISOString();
+
+        console.log('Receipts report - Processing date range:', dateFormat(startDate, 'yyyy-MM-dd'), 'to', dateFormat(endDate, 'yyyy-MM-dd'));
 
         // Use direct SQL for more reliability instead of the Drizzle ORM builder
         try {
@@ -344,8 +352,8 @@ router.get('/receipts', async (req, res) => {
                 FROM
                     orders o
                 WHERE
-                    DATE(o.created_at) >= DATE(${startDate})
-                    AND DATE(o.created_at) <= DATE(${endDate})
+                    DATE(o.created_at) >= DATE(${startDateISO})
+                    AND DATE(o.created_at) <= DATE(${endDateISO})
                     ${store !== 'all' ? sql`AND o.store_id = ${parseInt(store)}` : sql``}
                     ${employee !== 'all' ? sql`AND o.user_id = ${parseInt(employee)}` : sql``}
                 ORDER BY
@@ -460,7 +468,7 @@ router.get('/receipts', async (req, res) => {
                 receipts: filteredReceipts.map(receipt => ({
                     id: receipt.id,
                     receiptNo: receipt.receiptNo,
-                    date: format(new Date(String(receipt.date)), "yyyy-MM-dd HH:mm:ss"),
+                    date: dateFormat(new Date(String(receipt.date)), "yyyy-MM-dd HH:mm:ss"),
                     storeId: receipt.storeId,
                     storeName: receipt.storeName,
                     employeeId: receipt.employeeId,
@@ -512,7 +520,11 @@ router.get('/tax', async (req, res) => {
         // Set end time to end of day (23:59:59.999)
         endDate.setHours(23, 59, 59, 999);
 
-        console.log('Tax report - Processing date range:', format(startDate, 'yyyy-MM-dd'), 'to', format(endDate, 'yyyy-MM-dd'));
+        // Convert Date objects to ISO strings for SQL queries
+        const startDateISO = startDate.toISOString();
+        const endDateISO = endDate.toISOString();
+
+        console.log('Tax report - Processing date range:', dateFormat(startDate, 'yyyy-MM-dd'), 'to', dateFormat(endDate, 'yyyy-MM-dd'));
 
         try {
             // Use direct SQL query to avoid Drizzle ORM issues
@@ -526,8 +538,8 @@ router.get('/tax', async (req, res) => {
                 FROM
                     orders
                 WHERE
-                    DATE(created_at) >= DATE(${startDate})
-                    AND DATE(created_at) <= DATE(${endDate})
+                    DATE(created_at) >= DATE(${startDateISO})
+                    AND DATE(created_at) <= DATE(${endDateISO})
                     ${store !== 'all' ? sql`AND store_id = ${parseInt(store)}` : sql``}
                     ${employee !== 'all' ? sql`AND user_id = ${parseInt(employee)}` : sql``}
             `);
@@ -695,7 +707,11 @@ router.get('/discounts', async (req, res) => {
         // Set end time to end of day (23:59:59.999)
         endDate.setHours(23, 59, 59, 999);
 
-        console.log('Discounts report - Processing date range:', format(startDate, 'yyyy-MM-dd'), 'to', format(endDate, 'yyyy-MM-dd'));
+        // Convert Date objects to ISO strings for SQL queries
+        const startDateISO = startDate.toISOString();
+        const endDateISO = endDate.toISOString();
+
+        console.log('Discounts report - Processing date range:', dateFormat(startDate, 'yyyy-MM-dd'), 'to', dateFormat(endDate, 'yyyy-MM-dd'));
 
         // Use direct SQL to avoid Drizzle ORM issues
         try {
@@ -708,8 +724,8 @@ router.get('/discounts', async (req, res) => {
                 FROM
                     orders
                 WHERE
-                    DATE(created_at) >= DATE(${startDate})
-                    AND DATE(created_at) <= DATE(${endDate})
+                    DATE(created_at) >= DATE(${startDateISO})
+                    AND DATE(created_at) <= DATE(${endDateISO})
                     ${store !== 'all' ? sql`AND store_id = ${parseInt(store)}` : sql``}
                     ${employee !== 'all' ? sql`AND user_id = ${parseInt(employee)}` : sql``}
             `);
@@ -822,7 +838,7 @@ router.get('/employees', async (req, res) => {
         // Set end time to end of day (23:59:59.999)
         endDate.setHours(23, 59, 59, 999);
 
-        console.log('Employee sales report - Processing date range:', format(startDate, 'yyyy-MM-dd'), 'to', format(endDate, 'yyyy-MM-dd'));
+        console.log('Employee sales report - Processing date range:', dateFormat(startDate, 'yyyy-MM-dd'), 'to', dateFormat(endDate, 'yyyy-MM-dd'));
 
         try {
             // First build the date where clause for consistent usage
@@ -920,7 +936,7 @@ router.get('/employees', async (req, res) => {
 
             // Process daily sales data for each employee
             const dailySales = dailySalesResult.rows.map(row => ({
-                date: format(new Date(String(row.date)), 'MMM dd'),
+                date: dateFormat(new Date(String(row.date)), 'MMM dd'),
                 employeeId: Number(row.employeeId),
                 name: String(row.employeeName),
                 grossSales: Number(row.grossSales) || 0,
@@ -1053,8 +1069,8 @@ router.get('/sales-by-category', async (req, res) => {
             // Debug log the exact SQL date filter we're using
             console.log('Date filter logic:',
                 startDateStr === endDateStr ?
-                    `DATE(o.created_at) = DATE('${format(startDate, 'yyyy-MM-dd')}')` :
-                    `DATE(o.created_at) >= DATE('${format(startDate, 'yyyy-MM-dd')}') AND DATE(o.created_at) <= DATE('${format(endDate, 'yyyy-MM-dd')}')`
+                    `DATE(o.created_at) = DATE('${dateFormat(startDate, 'yyyy-MM-dd')}')` :
+                    `DATE(o.created_at) >= DATE('${dateFormat(startDate, 'yyyy-MM-dd')}') AND DATE(o.created_at) <= DATE('${dateFormat(endDate, 'yyyy-MM-dd')}')`
             );
 
             // Build store and employee filters
@@ -1180,7 +1196,7 @@ router.get('/sales-by-category', async (req, res) => {
             }
 
             // Calculate net sales (gross sales minus refunds)
-            const processedData = categorySalesData.map(category => {
+            const processedData = categorySalesData.map((category: any) => {
                 const grossSales = Number(category.grossSales) || 0;
                 const refundAmount = Number(category.refundAmount) || 0;
                 const netSales = grossSales - refundAmount;
@@ -1236,14 +1252,14 @@ router.get('/sales-by-category', async (req, res) => {
 
             // Process daily trends data for the chart
             const dailyTrends = dailyTrendsResult.rows.map(row => ({
-                date: format(new Date(String(row.date)), 'MMM dd'),
+                date: dateFormat(new Date(String(row.date)), 'MMM dd'),
                 categoryId: row.categoryId || 0,
                 categoryName: row.categoryName || 'Uncategorized',
                 sales: Number(row.grossSales) || 0
             }));
 
             // Group daily trends by category for time series chart
-            const timeSeriesData = processedData.map(category => {
+            const timeSeriesData = processedData.map((category: any) => {
                 const categoryTrends = dailyTrends
                     .filter(trend => trend.categoryId === category.categoryId)
                     .map(trend => ({
@@ -1258,16 +1274,19 @@ router.get('/sales-by-category', async (req, res) => {
                 };
             });
 
+            // Calculate total values for summary
+            const totalValues = {
+                totalQuantity,
+                totalGrossSales,
+                totalRefundAmount,
+                totalNetSales
+            };
+
             // Format the response
             const report = {
                 startDate,
                 endDate,
-                summary: {
-                    totalQuantity,
-                    totalGrossSales,
-                    totalRefundAmount,
-                    totalNetSales
-                },
+                summary: totalValues,
                 categories: processedData,
                 timeSeriesData
             };
@@ -1320,7 +1339,7 @@ router.get('/items', async (req, res) => {
         // Set end time to end of day (23:59:59.999)
         endDate.setHours(23, 59, 59, 999);
 
-        console.log('Items report - Processing date range:', format(startDate, 'yyyy-MM-dd'), 'to', format(endDate, 'yyyy-MM-dd'));
+        console.log('Items report - Processing date range:', dateFormat(startDate, 'yyyy-MM-dd'), 'to', dateFormat(endDate, 'yyyy-MM-dd'));
 
         // Use direct SQL for more reliable date handling
         try {
@@ -1480,7 +1499,7 @@ router.get('/items', async (req, res) => {
 
             // Process daily trends data into time series format expected by the frontend
             const dailyTrends = dailyTrendsResult.rows.map(row => ({
-                date: format(new Date(String(row.date)), 'MMM dd'),
+                date: dateFormat(new Date(String(row.date)), 'MMM dd'),
                 productId: row.productId,
                 productName: row.productName,
                 quantity: Number(row.quantity) || 0,
@@ -1578,7 +1597,7 @@ router.get('/payment-types', async (req, res) => {
         // Set end time to end of day (23:59:59.999)
         endDate.setHours(23, 59, 59, 999);
 
-        console.log('Payment types report - Processing date range:', format(startDate, 'yyyy-MM-dd'), 'to', format(endDate, 'yyyy-MM-dd'));
+        console.log('Payment types report - Processing date range:', dateFormat(startDate, 'yyyy-MM-dd'), 'to', dateFormat(endDate, 'yyyy-MM-dd'));
 
         try {
             // First build the date where clause for consistent usage
@@ -1721,7 +1740,7 @@ router.get('/modifiers', async (req, res) => {
         // Set end time to end of day (23:59:59.999)
         endDate.setHours(23, 59, 59, 999);
 
-        console.log('Modifiers report - Processing date range:', format(startDate, 'yyyy-MM-dd'), 'to', format(endDate, 'yyyy-MM-dd'));
+        console.log('Modifiers report - Processing date range:', dateFormat(startDate, 'yyyy-MM-dd'), 'to', dateFormat(endDate, 'yyyy-MM-dd'));
 
         try {
             // First build the date where clause for consistent usage

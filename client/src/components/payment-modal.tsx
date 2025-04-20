@@ -178,8 +178,38 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
   const cartTotal = (cart?.total !== undefined && cart?.total !== null) ? cart.total : 0;
   const change = Math.max(0, amountTenderedNum - cartTotal);
 
-  // Quick amount buttons
-  const quickAmounts = [1, 5, 10, 20, 50, 100];
+  // Quick amount buttons - improved for more intuitive use
+  const generateQuickAmounts = () => {
+    if (!cartTotal) return [20, 50, 100, 200, 500, 1000];
+
+    const exactAmount = Math.ceil(cartTotal);
+
+    // Common denominations based on total amount
+    const suggestedAmounts = [];
+
+    // For small amounts, offer small increments
+    if (cartTotal < 50) {
+      suggestedAmounts.push(...[50, 100, 200]);
+    }
+    // For medium amounts
+    else if (cartTotal < 200) {
+      suggestedAmounts.push(...[200, 500, 1000]);
+    }
+    // For larger amounts
+    else if (cartTotal < 1000) {
+      suggestedAmounts.push(...[1000, 2000]);
+    }
+    // For very large amounts
+    else {
+      const roundTo1000 = Math.ceil(cartTotal / 1000) * 1000;
+      suggestedAmounts.push(roundTo1000, roundTo1000 + 1000);
+    }
+
+    // Common increments above the total
+    return [exactAmount, ...suggestedAmounts].slice(0, 5);
+  };
+
+  const quickAmounts = generateQuickAmounts();
 
   // Handle quick amount selection with null safety
   const handleQuickAmount = (amount: number) => {
@@ -191,6 +221,11 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
       // Fallback to just using the amount if there's a parsing error
       setAmountTendered(amount.toString());
     }
+  };
+
+  // Reset amount to exact cart total
+  const handleExactAmount = () => {
+    setAmountTendered(cartTotal.toString());
   };
 
   // Set payment method with name
@@ -534,16 +569,18 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {/* Display payment types from settings */}
+              <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto">
+                {/* Display payment types from settings in a 3-column grid for more efficient selection */}
                 {paymentTypes.map((pt) => (
                   <Button
                     key={pt.id}
-                    className={`${paymentMethod === pt.code ? 'bg-primary text-white' : 'bg-white text-gray-700 border border-gray-300'} flex items-center gap-2`}
+                    className={`${paymentMethod === pt.code ? 'bg-primary text-white' : 'bg-white text-gray-700 border border-gray-300'} flex items-center justify-center gap-1 text-sm h-16`}
                     onClick={() => handleSetPaymentMethod(pt.code, pt.name)}
                   >
-                    <PaymentMethodIcon code={pt.code} name={pt.name} />
-                    {pt.name}
+                    <div className="flex flex-col items-center">
+                      <PaymentMethodIcon code={pt.code} name={pt.name} />
+                      <span className="mt-1 text-center line-clamp-1">{pt.name}</span>
+                    </div>
                   </Button>
                 ))}
               </div>
@@ -561,24 +598,53 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
                     const value = e.target.value.replace(/[^0-9.]/g, '');
                     setAmountTendered(value);
                   }}
-                  className="text-right font-semibold"
+                  className="text-right font-semibold text-lg"
                   placeholder="0.00"
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                {quickAmounts.map(amount => (
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-medium">Quick Amount</h4>
                   <button
-                    key={amount}
-                    className="bg-gray-100 text-gray-700 rounded p-2 text-center hover:bg-gray-200"
-                    onClick={() => handleQuickAmount(amount)}
+                    onClick={handleExactAmount}
+                    className="text-xs px-2 py-1 bg-green-100 text-green-700 font-medium rounded-md hover:bg-green-200 transition-colors"
                   >
-                    +{format(amount)}
+                    Exact: {format(cartTotal)}
                   </button>
-                ))}
+                </div>
+
+                {/* Improved quick amount layout with rounded buttons */}
+                <div className="grid grid-cols-5 gap-2">
+                  {quickAmounts.map(amount => (
+                    <button
+                      key={amount}
+                      className="bg-blue-50 text-blue-700 font-medium rounded-full p-2 text-center hover:bg-blue-100 transition-colors h-12 flex items-center justify-center"
+                      onClick={() => setAmountTendered(amount.toString())}
+                    >
+                      {format(amount)}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+              {/* Quick add buttons in a more intuitive layout */}
+              <div className="mt-3">
+                <h4 className="font-medium mb-2">Quick Add</h4>
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].slice(0, 8).map(amount => (
+                    <button
+                      key={amount}
+                      className="bg-gray-100 text-gray-700 rounded-md p-2 text-center hover:bg-gray-200 transition-colors border border-gray-200"
+                      onClick={() => handleQuickAmount(amount)}
+                    >
+                      +{format(amount)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded-lg space-y-2 mt-4">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Amount Tendered</span>
                   <span className="font-medium">{format(parse(amountTendered))}</span>
@@ -589,7 +655,7 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
                 </div>
                 <div className="flex justify-between text-lg font-bold border-t border-gray-200 pt-2 mt-2">
                   <span>Change</span>
-                  <span className="text-green-500">{format(change)}</span>
+                  <span className={change > 0 ? "text-green-500" : "text-gray-800"}>{format(change)}</span>
                 </div>
               </div>
             </div>
@@ -672,20 +738,40 @@ export default function PaymentModal({ isOpen, onClose, onPaymentComplete, cart,
               </div>
             </div>
           ) : (
-            // Generic non-cash, non-card payment method
             <div className="space-y-4">
               <div className="p-4 bg-gray-50 rounded-lg text-center">
                 <div className="flex justify-center mb-2">
-                  <PaymentMethodIcon code={paymentMethod} name={paymentMethodName} />
+                  <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center">
+                    <PaymentMethodIcon code={paymentMethod} name={paymentMethodName} />
+                  </div>
                 </div>
-                <p>Complete payment using {paymentMethodName}</p>
+                <p className="font-medium text-lg">{paymentMethodName}</p>
                 <p className="text-sm text-gray-500 mt-2">Amount: {format(cartTotal)}</p>
+
+                {/* Show QR code placeholder with improved styling for mobile payments */}
+                {(paymentMethod.toLowerCase().includes('gcash') ||
+                 paymentMethod.toLowerCase().includes('maya') ||
+                 paymentMethod.toLowerCase().includes('grabpay')) && (
+                  <div className="mt-4 border border-gray-200 rounded-md p-4 max-w-[200px] mx-auto bg-white">
+                    <div className="bg-gray-100 h-[180px] w-[180px] mx-auto flex items-center justify-center rounded-md">
+                      <svg className="h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium mt-3">Scan QR to pay</p>
+                    <p className="text-xs text-gray-500 mt-1">Reference: {Math.floor(Math.random() * 900000) + 100000}</p>
+                  </div>
+                )}
+
+                <div className="mt-4 text-sm bg-blue-50 p-3 rounded-md text-blue-700">
+                  Once payment is confirmed, click "Complete Payment" below
+                </div>
               </div>
             </div>
           )}
 
           <Button
-            className="w-full bg-green-500 text-white hover:bg-green-600 mt-6"
+            className="w-full bg-green-500 text-white hover:bg-green-600 mt-6 py-6 text-lg font-medium"
             onClick={handleCompletePayment}
             disabled={isCheckingOut}
           >

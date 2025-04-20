@@ -99,6 +99,10 @@ export default function POSLayout({ children }: { children: React.ReactNode }) {
         return "Sales by Item";
       case "/reports/categories":
         return "Sales by Category";
+      case "/kitchen-queues":
+        return "Kitchen Queue Management";
+      case "/kitchen-orders":
+        return "Kitchen Dashboard";
       case "/settings":
         return "Settings";
       default:
@@ -153,6 +157,17 @@ export default function POSLayout({ children }: { children: React.ReactNode }) {
                     </svg>
                   }
                   label="Items"
+                />
+
+                <BottomNavItem
+                  href="/kitchen-orders"
+                  isActive={location === "/kitchen-orders" || location === "/kitchen-queues"}
+                  icon={
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  }
+                  label="Kitchen"
                 />
 
                 <BottomNavItem
