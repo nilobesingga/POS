@@ -22,8 +22,10 @@ const app = express();
 // Configure CORS
 app.use(cors({
     origin: process.env.NODE_ENV === 'production'
-        ? 'https://your-production-domain.com'
-        : 'http://localhost:5000',
+        ? ['https://your-production-domain.com', 'capacitor://localhost']
+        : ['http://localhost:5000', 'http://10.0.1.170:5000', 'capacitor://localhost', 'http://localhost'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
 }));
 
@@ -52,7 +54,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
         });
 
         const port = Number(process.env.PORT) || 5000;
-        const host = process.env.HOST || "127.0.0.1";
+        const host = process.env.HOST || "10.0.1.170";//"127.0.0.1"//"192.168.1.53";
 
         const server = app.listen(port, host, () => {
             log(`🚀 Server running at http://${host}:${port}`);

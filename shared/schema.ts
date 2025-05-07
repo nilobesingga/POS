@@ -209,6 +209,30 @@ export const insertOrderItemSchema = createInsertSchema(orderItems).pick({
     price: true,
 });
 
+// Order Item Modifiers
+export const orderItemModifiers = pgTable("order_item_modifiers", {
+    id: serial("id").primaryKey(),
+    orderItemId: integer("order_item_id").references(() => orderItems.id).notNull(),
+    modifierId: integer("modifier_id").references(() => modifiers.id).notNull(),
+    modifierOptionId: integer("modifier_option_id").references(() => modifierOptions.id),
+    name: text("name").notNull(),
+    price: numeric("price", { precision: 10, scale: 2 }).notNull().default("0"),
+    quantity: integer("quantity").notNull().default(1),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertOrderItemModifierSchema = createInsertSchema(orderItemModifiers).pick({
+    orderItemId: true,
+    modifierId: true,
+    modifierOptionId: true,
+    name: true,
+    price: true,
+    quantity: true,
+});
+
+export type OrderItemModifier = typeof orderItemModifiers.$inferSelect;
+export type InsertOrderItemModifier = z.infer<typeof insertOrderItemModifierSchema>;
+
 // Orders
 export const orders = pgTable("orders", {
     id: serial("id").primaryKey(),

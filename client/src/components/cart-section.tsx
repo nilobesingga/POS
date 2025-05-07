@@ -589,7 +589,10 @@ export default function CartSection() {
             </div>
           </div>
           <div className="flex justify-between py-1">
-            <span className="text-gray-600">Vat ({defaultTaxRate}%)</span>
+            <div className="flex items-center">
+              <span className="text-gray-600">Tax ({defaultTaxRate}%)</span>
+              <span className="ml-1 text-xs text-gray-400">(taxable items only)</span>
+            </div>
             <span className="font-medium">{formatCurrency(cart.tax)}</span>
           </div>
           <div className="flex justify-between py-2 text-lg font-bold">

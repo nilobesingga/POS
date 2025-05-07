@@ -28,6 +28,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export async function registerRoutes(app: Express) {
+    // Add a health check endpoint
+    app.get("/api/health-check", (req, res) => {
+        res.status(200).json({ status: "ok", message: "Server is running" });
+    });
+
     // Register all routes
     app.use("/api/categories", categoriesRouter);
     app.use("/api/products", productsRouter);
